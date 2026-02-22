@@ -1,38 +1,39 @@
 name: mobile
-description: Tempus Victa - Assistant OS
+description: Tempus Victa (Tempus Vista) - local-first AI-augmented assistant
 publish_to: "none"
-
 version: 0.1.0+1
 
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: ">=3.4.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
 
-  cupertino_icons: ^1.0.2
+  cupertino_icons: ^1.0.8
+  http: ^1.2.2
+  uuid: ^4.4.0
+  intl: ^0.19.0
 
-  sqflite: ^2.3.0
-  path: ^1.8.3
-  provider: ^6.1.1
-
-  # Modern speech plugin (NO Registrar)
-  speech_to_text: ^7.0.0
-
-  receive_sharing_intent: ^1.4.5
-  permission_handler: ^11.3.1
+  # Local-first persistence + filesystem
   path_provider: ^2.1.4
-  uuid: ^4.3.3
-  intl: ^0.18.1
+  sqflite: ^2.3.3+1
+
+  # Permissions + voice
+  permission_handler: ^11.3.1
+  speech_to_text: ^7.3.0
+
+  # Clickable links for Ready Room web research
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.1
+  flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/
     - assets/legacy_user_profiles/
+    - assets/app_knowledge.txt
+    - assets/trusted_sources_active.json

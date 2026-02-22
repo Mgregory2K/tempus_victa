@@ -11,7 +11,8 @@ class AiSettings {
 
   static Future<bool> isEnabled() async {
     final v = (await AppDb.instance.getMeta(_kEnabled))?.trim().toLowerCase();
-    return v == null ? true : (v == 'true' || v == '1' || v == 'yes');
+    // Textbook doctrine: AI is opt-in (OFF by default) and sticky once toggled.
+    return v == null ? false : (v == 'true' || v == '1' || v == 'yes');
   }
 
   static Future<void> setEnabled(bool enabled) => AppDb.instance.setMeta(_kEnabled, enabled ? 'true' : 'false');

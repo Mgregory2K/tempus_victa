@@ -85,4 +85,18 @@ class SignalRepo {
     final now = DateTime.now().toUtc().millisecondsSinceEpoch;
     await d.update('signals', {'weight': weight, 'modified_at_utc': now}, where: 'id = ?', whereArgs: [id]);
   }
+
+  Future<List<Signal>> search(String query, {int limit = 10}) async {
+    final q = query.trim();
+    if (q.isEmpty) return const <Signal>[];
+    final d = await AppDb.instance.db;
+    final rows = await d.query(
+      'signals',
+      where: 'text LIKE ? OR transcript LIKE ? OR source LIKE ?',
+      whereArgs: ['%$q%', '%$q%', '%$q%'],
+      orderBy: 'captured_at_utc DESC',
+      limit: limit,
+    );
+    return rows.map((e) => Signal.fromRow(e)).toList();
+  }
 }

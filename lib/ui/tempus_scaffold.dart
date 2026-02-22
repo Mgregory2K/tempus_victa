@@ -161,6 +161,7 @@ class _GlobalCaptureState extends State<_GlobalCapture> {
         const SizedBox(height: 10),
         InputComposer(
           hint: 'Say/type anything… ("create a task …", "create a project …", etc.)',
+          enabled: !_busy,
           onSubmit: ({text, transcript}) => _ingest(text: text, transcript: transcript),
         ),
       ],

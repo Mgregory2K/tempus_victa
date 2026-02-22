@@ -58,4 +58,18 @@ class TaskRepo {
     final now = DateTime.now().toUtc().millisecondsSinceEpoch;
     await d.update('tasks', {'status': status, 'modified_at_utc': now}, where: 'id = ?', whereArgs: [id]);
   }
+
+  Future<List<Task>> search(String query, {int limit = 10}) async {
+    final q = query.trim();
+    if (q.isEmpty) return const <Task>[];
+    final d = await AppDb.instance.db;
+    final rows = await d.query(
+      'tasks',
+      where: 'title LIKE ? OR details LIKE ?',
+      whereArgs: ['%$q%', '%$q%'],
+      orderBy: 'captured_at_utc DESC',
+      limit: limit,
+    );
+    return rows.map(Task.fromRow).toList();
+  }
 }

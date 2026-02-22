@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../data/repositories/automation_rule_repo.dart';
+import '../../services/ai/ai_key.dart';
+import '../../services/ai/ai_settings.dart';
 import '../../services/logging/jsonl_logger.dart';
 import '../../ui/tempus_scaffold.dart';
 import '../../data/models/automation_rule.dart';
@@ -21,11 +23,24 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late Future<List<AutomationRule>> _rulesFuture;
+  bool _aiEnabled = false;
+  String _keyStatus = 'Not set';
 
   @override
   void initState() {
     super.initState();
     _rulesFuture = AutomationRuleRepo.instance.list();
+    _loadAi();
+  }
+
+  Future<void> _loadAi() async {
+    final enabled = await AiSettings.isEnabled();
+    final key = (await AiKey.get())?.trim();
+    if (!mounted) return;
+    setState(() {
+      _aiEnabled = enabled;
+      _keyStatus = (key == null || key.isEmpty) ? 'Not set' : 'Saved';
+    });
   }
 
   void _reload() => setState(() => _rulesFuture = AutomationRuleRepo.instance.list());
@@ -63,6 +78,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          const Text(
+            'AI (Opt-in)',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: SwitchListTile(
+              title: const Text('Enable AI augmentation (sticky)'),
+              subtitle: const Text('When OFF, the app remains local-first. When ON, Ready Room can use AI after local→trusted→web.'),
+              value: _aiEnabled,
+              onChanged: (v) async {
+                await AiSettings.setEnabled(v);
+                await JsonlLogger.instance.log('ai_toggle', {'enabled': v});
+                if (!mounted) return;
+                setState(() => _aiEnabled = v);
+              },
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.key),
+              title: const Text('OpenAI API Key'),
+              subtitle: Text('Status: $_keyStatus'),
+              onTap: () async {
+                final controller = TextEditingController(text: (await AiKey.get()) ?? '');
+                if (!context.mounted) return;
+                final saved = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) {
+                    return AlertDialog(
+                      title: const Text('OpenAI API Key'),
+                      content: TextField(
+                        controller: controller,
+                        decoration: const InputDecoration(hintText: 'sk-...'),
+                        obscureText: true,
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                        TextButton(
+                          onPressed: () async {
+                            final v = controller.text.trim();
+                            if (v.isEmpty) {
+                              await AiKey.clear();
+                            } else {
+                              await AiKey.set(v);
+                            }
+                            if (ctx.mounted) Navigator.pop(ctx, true);
+                          },
+                          child: const Text('Save'),
+                        ),
+                      ],
+                    );
+                  },
+                );
+                if (saved == true) {
+                  await _loadAi();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('AI key saved')));
+                  }
+                }
+              },
+            ),
+          ),
+
           const Text(
             'Automation Rules (local-first)',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),

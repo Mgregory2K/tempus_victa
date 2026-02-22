@@ -10,12 +10,14 @@ class InputComposer extends StatefulWidget {
   final String hint;
   final Future<void> Function({String? text, String? transcript}) onSubmit;
   final bool autofocus;
+  final bool enabled;
 
   const InputComposer({
     super.key,
     required this.onSubmit,
     this.hint = 'Type or use mic…',
     this.autofocus = false,
+    this.enabled = true,
   });
 
   @override
@@ -33,6 +35,7 @@ class _InputComposerState extends State<InputComposer> {
   }
 
   Future<void> _sendText() async {
+    if (!widget.enabled) return;
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     _controller.clear();
@@ -40,6 +43,7 @@ class _InputComposerState extends State<InputComposer> {
   }
 
   Future<void> _toggleMic() async {
+    if (!widget.enabled) return;
     if (_listening) {
       await VoiceService.instance.stop();
       setState(() => _listening = false);
@@ -61,6 +65,7 @@ class _InputComposerState extends State<InputComposer> {
           child: TextField(
             controller: _controller,
             autofocus: widget.autofocus,
+            enabled: widget.enabled,
             decoration: InputDecoration(
               hintText: widget.hint,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
@@ -71,12 +76,12 @@ class _InputComposerState extends State<InputComposer> {
         ),
         const SizedBox(width: 8),
         IconButton(
-          onPressed: _toggleMic,
+          onPressed: widget.enabled ? _toggleMic : null,
           icon: Icon(_listening ? Icons.stop_circle : Icons.mic),
           tooltip: _listening ? 'Stop' : 'Mic',
         ),
         IconButton(
-          onPressed: _sendText,
+          onPressed: widget.enabled ? _sendText : null,
           icon: const Icon(Icons.send),
           tooltip: 'Send',
         ),

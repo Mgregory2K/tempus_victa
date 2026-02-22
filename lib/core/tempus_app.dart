@@ -51,7 +51,7 @@ class _TempusAppState extends State<TempusApp> {
         Permission.activityRecognition,
         Permission.ignoreBatteryOptimizations,
       ].request();
-      
+
       setState(() => _status = 'Starting ingestion…');
       try {
         await IngestionService.instance.start();
