@@ -3,14 +3,19 @@ import 'package:flutter/material.dart';
 class RoomFrame extends StatelessWidget {
   final String title;
   final Widget child;
-  final List<Widget> actions;
+
+  /// Optional FAB slot used by Tasks, Projects, etc.
+  final Widget? fab;
+
+  /// Alias for FAB used by Bridge (older param name).
+  /// If both [floating] and [fab] are provided, [floating] wins.
   final Widget? floating;
 
   const RoomFrame({
     super.key,
     required this.title,
     required this.child,
-    this.actions = const [],
+    this.fab,
     this.floating,
   });
 
@@ -19,10 +24,10 @@ class RoomFrame extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
-        actions: actions,
+        centerTitle: false,
       ),
       body: SafeArea(child: child),
-      floatingActionButton: floating,
+      floatingActionButton: floating ?? fab,
     );
   }
 }

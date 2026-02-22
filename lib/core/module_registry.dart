@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'module_def.dart';
 import '../ui/placeholder_room.dart';
+
 import '../ui/rooms/bridge_room.dart';
+import '../ui/rooms/signal_bay_room.dart';
 import '../ui/rooms/tasks_room.dart';
+import '../ui/rooms/projects_room.dart';
+import '../ui/rooms/recycle_bin_room.dart';
 
 class ModuleRegistry {
   static List<ModuleDef> defaultModules() => const [
@@ -19,7 +23,7 @@ class ModuleRegistry {
           name: 'Signal Bay',
           icon: Icons.radar_rounded,
           usesCarousel: true,
-          builder: PlaceholderRoom.new,
+          builder: SignalBayRoom.new,
         ),
         ModuleDef(
           id: 'corkboard',
@@ -40,7 +44,7 @@ class ModuleRegistry {
           name: 'Projects',
           icon: Icons.folder_rounded,
           usesCarousel: true,
-          builder: PlaceholderRoom.new,
+          builder: ProjectsRoom.new,
         ),
         ModuleDef(
           id: 'ready_room',
@@ -61,7 +65,7 @@ class ModuleRegistry {
           name: 'Recycle Bin',
           icon: Icons.delete_rounded,
           usesCarousel: true,
-          builder: PlaceholderRoom.new,
+          builder: RecycleBinRoom.new,
         ),
         ModuleDef(
           id: 'settings',

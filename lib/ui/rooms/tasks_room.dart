@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../core/app_state_scope.dart';
+import '../../core/project_item.dart';
+import '../../core/project_store.dart';
+import '../../core/recycle_bin_store.dart';
 import '../../core/task_item.dart';
 import '../../core/task_store.dart';
 import '../room_frame.dart';
@@ -19,14 +22,131 @@ class TasksRoom extends StatefulWidget {
 class _TasksRoomState extends State<TasksRoom> {
   Future<List<TaskItem>> _load() => TaskStore.load();
 
-  final AudioPlayer _player = AudioPlayer();
-  String? _playingTaskId;
-  bool _loadingPlayback = false;
+  Future<void> _createManualTask() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New task'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Type a task...',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('Create')),
+        ],
+      ),
+    );
 
-  @override
-  void dispose() {
-    _player.dispose();
-    super.dispose();
+    if (text == null || text.isEmpty) return;
+
+    final now = DateTime.now();
+    final t = TaskItem(
+      id: now.microsecondsSinceEpoch.toString(),
+      createdAt: now,
+      title: text,
+      transcript: null,
+      audioPath: null,
+      projectId: null,
+    );
+
+    final tasks = await TaskStore.load();
+    await TaskStore.save([t, ...tasks]);
+
+    if (!mounted) return;
+    AppStateScope.of(context).bumpTasksVersion();
+  }
+
+  Future<void> _renameTask(TaskItem task) async {
+    final controller = TextEditingController(text: task.title);
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rename task'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Task title'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (text == null || text.trim().isEmpty) return;
+
+    final tasks = await TaskStore.load();
+    final idx = tasks.indexWhere((t) => t.id == task.id);
+    if (idx < 0) return;
+
+    final updated = List<TaskItem>.of(tasks);
+    updated[idx] = updated[idx].copyWith(title: text.trim());
+    await TaskStore.save(updated);
+
+    if (!mounted) return;
+    AppStateScope.of(context).bumpTasksVersion();
+  }
+
+  Future<void> _trashTask(TaskItem task) async {
+    // Remove from tasks
+    final tasks = await TaskStore.load();
+    final updatedTasks = List<TaskItem>.of(tasks)..removeWhere((t) => t.id == task.id);
+    await TaskStore.save(updatedTasks);
+
+    // Add to recycle bin (tasks)
+    final bin = await RecycleBinStore.loadTasks();
+    await RecycleBinStore.saveTasks([task, ...bin]);
+
+    if (!mounted) return;
+    AppStateScope.of(context).bumpTasksVersion();
+  }
+
+  Future<void> _attachToProject(TaskItem task) async {
+    final projects = await ProjectStore.load();
+    if (!mounted) return;
+
+    final selected = await showModalBottomSheet<_ProjectPickResult>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _ProjectPickerSheet(projects: projects),
+    );
+
+    if (selected == null) return;
+
+    String? projectId = selected.projectId;
+
+    // Create new project if requested
+    if (selected.createNewName != null) {
+      final now = DateTime.now();
+      final p = ProjectItem(
+        id: now.microsecondsSinceEpoch.toString(),
+        createdAt: now,
+        name: selected.createNewName!,
+      );
+      await ProjectStore.save([p, ...projects]);
+      projectId = p.id;
+    }
+
+    if (projectId == null) return;
+
+    final tasks = await TaskStore.load();
+    final idx = tasks.indexWhere((t) => t.id == task.id);
+    if (idx < 0) return;
+
+    final updated = List<TaskItem>.of(tasks);
+    updated[idx] = updated[idx].copyWith(projectId: projectId);
+    await TaskStore.save(updated);
+
+    if (!mounted) return;
+    AppStateScope.of(context).bumpTasksVersion();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Attached to project')),
+    );
   }
 
   @override
@@ -36,6 +156,10 @@ class _TasksRoomState extends State<TasksRoom> {
 
     return RoomFrame(
       title: widget.roomName,
+      fab: FloatingActionButton(
+        onPressed: _createManualTask,
+        child: const Icon(Icons.add),
+      ),
       child: FutureBuilder<List<TaskItem>>(
         future: _load(),
         builder: (context, snap) {
@@ -46,208 +170,207 @@ class _TasksRoomState extends State<TasksRoom> {
           }
 
           if (tasks.isEmpty) {
-            return const Center(child: Text('No tasks yet.'));
+            return const Center(child: Text('No tasks yet. Tap + to create one.'));
           }
 
           return ListView.separated(
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: tasks.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, i) => _taskTile(context, tasks[i]),
+            itemBuilder: (context, i) {
+              final t = tasks[i];
+              final hasAudio = t.audioPath != null && t.audioPath!.isNotEmpty;
+              final subtitle = hasAudio
+                  ? 'Voice capture'
+                  : (t.transcript?.trim().isNotEmpty == true ? 'Text' : '');
+
+              return Dismissible(
+                key: ValueKey('task_${t.id}'),
+                background: _SwipeBg(
+                  icon: Icons.folder_rounded,
+                  label: 'Attach to project',
+                  alignLeft: true,
+                ),
+                secondaryBackground: _SwipeBg(
+                  icon: Icons.delete_rounded,
+                  label: 'Recycle',
+                  alignLeft: false,
+                ),
+                confirmDismiss: (dir) async {
+                  if (dir == DismissDirection.startToEnd) {
+                    // Right swipe: attach, but do NOT dismiss.
+                    await _attachToProject(t);
+                    return false;
+                  }
+                  if (dir == DismissDirection.endToStart) {
+                    // Left swipe: trash/recycle
+                    return true;
+                  }
+                  return false;
+                },
+                onDismissed: (_) async {
+                  await _trashTask(t);
+                },
+                child: ListTile(
+                  leading: Icon(hasAudio ? Icons.mic_rounded : Icons.task_alt_rounded),
+                  title: Text(t.title),
+                  subtitle: subtitle.isEmpty ? null : Text(subtitle),
+                  trailing: IconButton(
+                    tooltip: 'Rename',
+                    icon: const Icon(Icons.edit_rounded),
+                    onPressed: () => _renameTask(t),
+                  ),
+                  onTap: () => showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => _TaskDetail(task: t),
+                  ),
+                ),
+              );
+            },
           );
         },
       ),
     );
   }
+}
 
-  Widget _taskTile(BuildContext context, TaskItem t) {
-    final hasAudio = t.audioPath != null && t.audioPath!.isNotEmpty;
-    final created = _fmtCreated(t.createdAt);
+class _SwipeBg extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool alignLeft;
 
-    final dur = (t.audioDurationMs == null || t.audioDurationMs! <= 0)
-        ? null
-        : _fmtDuration(Duration(milliseconds: t.audioDurationMs!));
+  const _SwipeBg({
+    required this.icon,
+    required this.label,
+    required this.alignLeft,
+  });
 
-    final subtitle = hasAudio
-        ? (dur == null ? 'Voice • $created' : 'Voice • $dur • $created')
-        : (t.transcript?.trim().isNotEmpty == true ? 'Text • $created' : created);
-
-    final isThisPlaying = _playingTaskId == t.id;
-
-    return StreamBuilder<PlayerState>(
-      stream: _player.playerStateStream,
-      builder: (context, psSnap) {
-        final playing = psSnap.data?.playing ?? false;
-        final showPause = isThisPlaying && playing;
-
-        return ListTile(
-          leading: Icon(hasAudio ? Icons.mic_rounded : Icons.check_box_outline_blank_rounded),
-          title: Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (hasAudio)
-                IconButton(
-                  tooltip: showPause ? 'Pause' : 'Play',
-                  onPressed: _loadingPlayback ? null : () => _togglePlay(t),
-                  icon: _loadingPlayback && isThisPlaying
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(showPause ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                ),
-              IconButton(
-                tooltip: 'Rename',
-                onPressed: () => _renameTask(t),
-                icon: const Icon(Icons.edit_rounded),
-              ),
-              IconButton(
-                tooltip: 'Details',
-                onPressed: () => _openTask(context, t),
-                icon: const Icon(Icons.chevron_right_rounded),
-              ),
-            ],
-          ),
-          onTap: () {
-            // Busy-user default: tap row plays if it's a voice task, else opens details.
-            if (hasAudio) {
-              _togglePlay(t);
-            } else {
-              _openTask(context, t);
-            }
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _togglePlay(TaskItem t) async {
-    final path = t.audioPath;
-    if (path == null || path.isEmpty) return;
-
-    final f = File(path);
-    if (!await f.exists()) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Audio file not found.')),
-      );
-      return;
-    }
-
-    setState(() {
-      _loadingPlayback = true;
-    });
-
-    try {
-      final isSame = _playingTaskId == t.id;
-
-      if (isSame && _player.playing) {
-        await _player.pause();
-        return;
-      }
-
-      if (!isSame) {
-        _playingTaskId = t.id;
-        await _player.setFilePath(path);
-      }
-
-      await _player.play();
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to play audio.')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingPlayback = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _renameTask(TaskItem task) async {
-    final controller = TextEditingController(text: task.title);
-    final newTitle = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Rename task'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => Navigator.pop(context, controller.text.trim()),
-            decoration: const InputDecoration(
-              hintText: 'Enter a title',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, controller.text.trim()),
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-
-    final trimmed = newTitle?.trim();
-    if (trimmed == null || trimmed.isEmpty) return;
-
-    final updated = task.copyWith(title: trimmed);
-    await TaskStore.upsert(updated);
-
-    if (!mounted) return;
-    AppStateScope.of(context).bumpTasksVersion();
-  }
-
-  Future<void> _openTask(BuildContext context, TaskItem task) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => _TaskDetail(
-        task: task,
-        onRename: (newTitle) async {
-          final updated = task.copyWith(title: newTitle);
-          await TaskStore.upsert(updated);
-          if (!context.mounted) return;
-          AppStateScope.of(context).bumpTasksVersion();
-        },
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: alignLeft ? Colors.blue.withOpacity(0.18) : Colors.red.withOpacity(0.25),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      alignment: alignLeft ? Alignment.centerLeft : Alignment.centerRight,
+      child: Row(
+        mainAxisAlignment: alignLeft ? MainAxisAlignment.start : MainAxisAlignment.end,
+        children: [
+          if (alignLeft) ...[
+            Icon(icon),
+            const SizedBox(width: 8),
+            Text(label),
+          ] else ...[
+            Text(label),
+            const SizedBox(width: 8),
+            Icon(icon),
+          ]
+        ],
       ),
     );
   }
+}
 
-  String _fmtCreated(DateTime dt) {
-    final d = dt.toLocal();
-    int hour = d.hour;
-    final minute = d.minute.toString().padLeft(2, '0');
-    final ampm = hour >= 12 ? 'PM' : 'AM';
-    hour = hour % 12;
-    if (hour == 0) hour = 12;
-    return '$hour:$minute $ampm';
+class _ProjectPickResult {
+  final String? projectId;
+  final String? createNewName;
+  const _ProjectPickResult.select(this.projectId) : createNewName = null;
+  const _ProjectPickResult.create(this.createNewName) : projectId = null;
+}
+
+class _ProjectPickerSheet extends StatefulWidget {
+  final List<ProjectItem> projects;
+  const _ProjectPickerSheet({required this.projects});
+
+  @override
+  State<_ProjectPickerSheet> createState() => _ProjectPickerSheetState();
+}
+
+class _ProjectPickerSheetState extends State<_ProjectPickerSheet> {
+  final _newController = TextEditingController();
+
+  @override
+  void dispose() {
+    _newController.dispose();
+    super.dispose();
   }
 
-  String _fmtDuration(Duration d) {
-    final m = d.inMinutes;
-    final s = d.inSeconds % 60;
-    final ss = s.toString().padLeft(2, '0');
-    return '$m:$ss';
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Attach to project',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                )
+              ],
+            ),
+            if (widget.projects.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text('No projects yet. Create one below.'),
+              )
+            else
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: widget.projects.length,
+                  itemBuilder: (context, i) {
+                    final p = widget.projects[i];
+                    return ListTile(
+                      leading: const Icon(Icons.folder_rounded),
+                      title: Text(p.name),
+                      onTap: () => Navigator.pop(context, _ProjectPickResult.select(p.id)),
+                    );
+                  },
+                ),
+              ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _newController,
+              decoration: const InputDecoration(
+                labelText: 'Or create new',
+                hintText: 'New project name',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create & attach'),
+                    onPressed: () {
+                      final name = _newController.text.trim();
+                      if (name.isEmpty) return;
+                      Navigator.pop(context, _ProjectPickResult.create(name));
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
 class _TaskDetail extends StatefulWidget {
   final TaskItem task;
-  final Future<void> Function(String newTitle) onRename;
-  const _TaskDetail({required this.task, required this.onRename});
+  const _TaskDetail({required this.task});
 
   @override
   State<_TaskDetail> createState() => _TaskDetailState();
@@ -294,20 +417,9 @@ class _TaskDetailState extends State<_TaskDetail> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    t.title,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Rename',
-                  onPressed: _renameFromDetail,
-                  icon: const Icon(Icons.edit_rounded),
-                ),
-              ],
+            Text(
+              t.title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(
@@ -338,43 +450,15 @@ class _TaskDetailState extends State<_TaskDetail> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  (t.transcript == null || t.transcript!.trim().isEmpty) ? '—' : t.transcript!,
+                  (t.transcript == null || t.transcript!.trim().isEmpty)
+                      ? '—'
+                      : t.transcript!,
                 ),
               ),
           ],
         ),
       ),
     );
-  }
-
-  Future<void> _renameFromDetail() async {
-    final controller = TextEditingController(text: widget.task.title);
-    final newTitle = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Rename task'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => Navigator.pop(context, controller.text.trim()),
-            decoration: const InputDecoration(hintText: 'Enter a title'),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
-          ],
-        );
-      },
-    );
-
-    final trimmed = newTitle?.trim();
-    if (trimmed == null || trimmed.isEmpty) return;
-
-    await widget.onRename(trimmed);
-    if (!mounted) return;
-    Navigator.pop(context);
   }
 
   Widget _playerControls(BuildContext context) {
@@ -433,3 +517,4 @@ class _TaskDetailState extends State<_TaskDetail> {
     return '$m:$ss';
   }
 }
+
