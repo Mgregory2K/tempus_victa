@@ -4,19 +4,18 @@ class RoomFrame extends StatelessWidget {
   final String title;
   final Widget child;
 
-  /// Optional FAB slot used by Tasks, Projects, etc.
-  final Widget? fab;
-
-  /// Alias for FAB used by Bridge (older param name).
-  /// If both [floating] and [fab] are provided, [floating] wins.
+  /// Optional floating widget; kept for backward compatibility with Bridge.
   final Widget? floating;
+
+  /// Optional FAB slot used by Tasks/Projects.
+  final Widget? fab;
 
   const RoomFrame({
     super.key,
     required this.title,
     required this.child,
-    this.fab,
     this.floating,
+    this.fab,
   });
 
   @override
