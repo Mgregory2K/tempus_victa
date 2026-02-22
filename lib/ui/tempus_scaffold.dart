@@ -1,8 +1,9 @@
 // Tempus Victa - scaffold
 //
-// - Persistent bottom navigation (concept-aligned)
-// - Global microphone access (capture sheet)
-// - Background styling
+// Doctrine:
+// - Bottom "module ring" nav lives here (NOT RootShell).
+// - Capture input lives ABOVE the module ring (per UX directive).
+// - No machine-talk in UI; all logging is local (JSONL/DB).
 
 import 'dart:math' as math;
 
@@ -11,7 +12,6 @@ import 'package:flutter/material.dart';
 import '../data/repositories/signal_repo.dart';
 import '../data/repositories/task_repo.dart';
 import '../services/learning/learning_engine.dart';
-import '../services/logging/jsonl_logger.dart';
 import '../services/routing/command_router.dart';
 import '../ui/widgets/tempus_background.dart';
 import '../ui/widgets/tempus_carousel_nav.dart';
@@ -37,7 +37,12 @@ class TempusScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Ensures bottom nav never hides behind Android gesture/nav bars.
+    // MUST be double for EdgeInsets.only
+    final double bottomPad = math.max(
+      8.0,
+      MediaQuery.of(context).viewPadding.bottom.toDouble(),
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -52,119 +57,118 @@ class TempusScaffold extends StatelessWidget {
           ),
         ),
       ),
-      floatingActionButton: enableGlobalCapture
-          ? FloatingActionButton(
-              tooltip: 'Capture (text or voice)',
-              onPressed: () => _openCaptureSheet(context),
-              child: const Icon(Icons.mic),
-            )
-          : null,
+
+      // Capture input ABOVE the module nav (persistent).
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
-          padding: EdgeInsets.only(bottom: math.max(8, MediaQuery.of(context).viewPadding.bottom)),
-          child: TempusCarouselNav(
-            selectedIndex: selectedIndex,
-            onTap: onNavigate,
+          padding: EdgeInsets.only(bottom: bottomPad),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (enableGlobalCapture)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: _BottomCaptureBar(
+                    onCaptured: ({String? text, String? transcript}) async {
+                      await _capture(
+                        text: text,
+                        transcript: transcript,
+                        source: transcript != null ? 'global_voice' : 'global_text',
+                      );
+                    },
+                  ),
+                ),
+              TempusCarouselNav(
+                selectedIndex: selectedIndex,
+                onTap: onNavigate,
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Future<void> _openCaptureSheet(BuildContext context) async {
-    // Global capture: everything becomes a Signal + an Inbox Task, immediately.
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) {
-        final bottom = MediaQuery.of(ctx).viewInsets.bottom;
-        return Padding(
-          padding: EdgeInsets.only(left: 12, right: 12, bottom: bottom + 12),
-          child: _GlobalCapture(
-            onCaptured: (m) {
-              if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Captured ✅')));
-            },
-          ),
-        );
-      },
+  Future<void> _capture({
+    String? text,
+    String? transcript,
+    required String source,
+  }) async {
+    final content = (transcript ?? text ?? '').trim();
+    if (content.isEmpty) return;
+
+    // 1) Persist a Signal immediately.
+    final signal = await SignalRepo.instance.create(
+      kind: 'capture',
+      source: source,
+      text: text,
+      transcript: transcript,
+      status: 'inbox',
+      confidence: 0,
+      weight: 0,
     );
-  }
-}
 
-class _GlobalCapture extends StatefulWidget {
-  final void Function(Map<String, Object?> result) onCaptured;
-  const _GlobalCapture({required this.onCaptured});
+    // 2) Always create an Inbox Task so nothing is lost.
+    final route = CommandRouter.route(content);
+    final payload = route.payload.trim().isEmpty ? content : route.payload.trim();
 
-  @override
-  State<_GlobalCapture> createState() => _GlobalCaptureState();
-}
-
-class _GlobalCaptureState extends State<_GlobalCapture> {
-  bool _busy = false;
-
-  Future<void> _ingest({String? text, String? transcript}) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-
-    try {
-      final nowUtc = DateTime.now().toUtc();
-      final source = (transcript != null && transcript.trim().isNotEmpty) ? 'global_voice' : 'global_text';
-
-      final s = await SignalRepo.instance.create(
-        kind: (transcript != null && transcript.trim().isNotEmpty) ? 'voice' : 'text',
-        source: source,
-        text: text,
-        transcript: transcript,
-        capturedAtUtc: nowUtc,
-        status: 'inbox',
-        confidence: 0.5,
-        weight: 0.2,
-      );
-
-      // Deterministic route.
-      final raw = (transcript ?? text ?? '').trim();
-      final route = CommandRouter.route(raw);
-      final payload = route.payload.isEmpty ? raw : route.payload;
-
+    // Deterministic routing (first-pass).
+    if (route.kind == 'task') {
       await TaskRepo.instance.create(
-        title: route.kind == 'unknown' ? 'Follow up: $payload' : payload,
-        details: route.kind == 'unknown' ? null : 'Intent: ${route.kind}',
+        title: payload.isEmpty ? 'New task' : payload,
         source: source,
-        signalId: s.id,
-        capturedAtUtc: nowUtc,
+        signalId: signal.id,
       );
-
-      await LearningEngine.instance.bumpRoute(fromSource: source, toBucket: 'inbox');
-      await JsonlLogger.instance.log('capture', {'signalId': s.id, 'source': source});
-
-      widget.onCaptured({'signalId': s.id, 'source': source});
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      await LearningEngine.instance.bumpRoute(fromSource: source, toBucket: 'task', delta: 1);
+    } else if (route.kind == 'project') {
+      // Until Projects are first-class again, represent projects as tasks.
+      await TaskRepo.instance.create(
+        title: payload.isEmpty ? 'New project' : 'Project: $payload',
+        source: source,
+        signalId: signal.id,
+      );
+      await LearningEngine.instance.bumpRoute(fromSource: source, toBucket: 'project', delta: 1);
+    } else if (route.kind == 'reminder') {
+      await TaskRepo.instance.create(
+        title: payload.isEmpty ? 'New reminder' : 'Reminder: $payload',
+        source: source,
+        signalId: signal.id,
+      );
+      await LearningEngine.instance.bumpRoute(fromSource: source, toBucket: 'reminder', delta: 1);
+    } else {
+      await TaskRepo.instance.create(
+        title: content.length > 80 ? 'Follow up: ${content.substring(0, 80)}…' : 'Follow up: $content',
+        source: source,
+        signalId: signal.id,
+      );
+      await LearningEngine.instance.bumpRoute(fromSource: source, toBucket: 'inbox', delta: 1);
     }
   }
+}
+
+class _BottomCaptureBar extends StatelessWidget {
+  final Future<void> Function({String? text, String? transcript}) onCaptured;
+
+  const _BottomCaptureBar({
+    required this.onCaptured,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('Capture', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
-        const SizedBox(height: 8),
-        Text(
-          'Text or voice. Everything becomes an Inbox Signal + an Inbox Task immediately.',
-          style: Theme.of(context).textTheme.bodyMedium,
+    final cs = Theme.of(context).colorScheme;
+    return Material(
+      elevation: 6,
+      borderRadius: BorderRadius.circular(14),
+      color: cs.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: InputComposer(
+          enabled: true,
+          hint: 'Say it or type it… (saved instantly)',
+          onSubmit: onCaptured,
         ),
-        const SizedBox(height: 10),
-        InputComposer(
-          hint: 'Say/type anything… ("create a task …", "create a project …", etc.)',
-          enabled: !_busy,
-          onSubmit: ({text, transcript}) => _ingest(text: text, transcript: transcript),
-        ),
-      ],
+      ),
     );
   }
 }
