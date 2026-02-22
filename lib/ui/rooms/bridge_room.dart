@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/app_state_scope.dart';
@@ -20,11 +21,18 @@ class BridgeRoom extends StatefulWidget {
 
 class _BridgeRoomState extends State<BridgeRoom> {
   final _recorder = AudioRecorder();
+  final SpeechToText _stt = SpeechToText();
+
   bool _isRecording = false;
   String? _activePath;
 
+  // Live transcript captured while recording (offline-capable if device has offline language packs).
+  String _liveTranscript = '';
+  bool _sttInitialized = false;
+
   @override
   void dispose() {
+    _stt.cancel();
     _recorder.dispose();
     super.dispose();
   }
@@ -36,6 +44,24 @@ class _BridgeRoomState extends State<BridgeRoom> {
       await audioDir.create(recursive: true);
     }
     return '${audioDir.path}/$taskId.m4a';
+  }
+
+  Future<void> _ensureSttReady() async {
+    if (_sttInitialized) return;
+
+    // If initialization fails (no service / restricted device), we still record audio.
+    try {
+      _sttInitialized = await _stt.initialize(
+        onError: (e) {
+          // Intentionally silent for baseline. Audio capture must still work.
+        },
+        onStatus: (s) {
+          // no-op
+        },
+      );
+    } catch (_) {
+      _sttInitialized = false;
+    }
   }
 
   Future<void> _startRecording() async {
@@ -53,6 +79,10 @@ class _BridgeRoomState extends State<BridgeRoom> {
     final taskId = const Uuid().v4();
     final path = await _nextAudioPath(taskId);
 
+    // Reset transcript for this capture.
+    _liveTranscript = '';
+
+    // Start audio recording first (core capture must work even if STT fails).
     await _recorder.start(
       const RecordConfig(
         encoder: AudioEncoder.aacLc,
@@ -62,6 +92,23 @@ class _BridgeRoomState extends State<BridgeRoom> {
       path: path,
     );
 
+    // Start live transcription in parallel (best-effort).
+    await _ensureSttReady();
+    if (_sttInitialized) {
+      try {
+        await _stt.listen(
+          onResult: (result) {
+            // Keep the latest recognized words. We'll save the final value when recording ends.
+            _liveTranscript = result.recognizedWords;
+          },
+          listenMode: ListenMode.dictation,
+          partialResults: true,
+        );
+      } catch (_) {
+        // Ignore STT issues; audio capture still succeeds.
+      }
+    }
+
     setState(() {
       _isRecording = true;
       _activePath = path;
@@ -70,6 +117,15 @@ class _BridgeRoomState extends State<BridgeRoom> {
 
   Future<void> _stopAndCreateTask() async {
     if (!_isRecording) return;
+
+    // Stop transcription first (best-effort) so we finalize recognized words.
+    try {
+      if (_stt.isListening) {
+        await _stt.stop();
+      }
+    } catch (_) {
+      // ignore
+    }
 
     final stoppedPath = await _recorder.stop();
 
@@ -84,12 +140,17 @@ class _BridgeRoomState extends State<BridgeRoom> {
     // The task ID is derived from filename.
     final id = path.split(Platform.pathSeparator).last.split('.').first;
 
+    final transcript = _liveTranscript.trim().isEmpty ? null : _liveTranscript.trim();
+    final title = transcript == null
+        ? 'Voice task'
+        : TaskItem.titleFromTranscript(transcript, maxWords: 6);
+
     final task = TaskItem(
       id: id,
       createdAt: DateTime.now(),
-      title: 'Voice task',
+      title: title,
       audioPath: path,
-      transcript: null,
+      transcript: transcript,
     );
 
     await TaskStore.upsert(task);
@@ -98,7 +159,7 @@ class _BridgeRoomState extends State<BridgeRoom> {
     AppStateScope.of(context).bumpTasksVersion();
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Task created')),
+      SnackBar(content: Text(transcript == null ? 'Task created (no transcript yet)' : 'Task created')),
     );
   }
 
