@@ -1,36 +1,23 @@
-// Tempus Vista rebuild - generated 2026-02-21
-// Local-first, Android-first.
-
-
-import 'dart:async';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'core/tempus_app.dart';
+import 'ui/app_shell.dart';
 
-/// App entry.
-///
-/// Stabilization notes:
-/// - Wrap startup in a guarded zone so any async boot exception doesn't
-///   hard-crash the process (which breaks the Dart VM service connection).
-/// - Route Flutter framework errors into the same zone handler.
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  runApp(const TempusApp());
+}
 
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    Zone.current.handleUncaughtError(
-      details.exception,
-      details.stack ?? StackTrace.current,
+class TempusApp extends StatelessWidget {
+  const TempusApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Tempus, Victa',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        useMaterial3: true,
+      ),
+      home: const AppShell(),
     );
-  };
-
-  runZonedGuarded(() {
-    runApp(const TempusApp());
-  }, (Object error, StackTrace stack) {
-    if (kDebugMode) {
-      // ignore: avoid_print
-      print('UNCAUGHT: $error\n$stack');
-    }
-  });
+  }
 }

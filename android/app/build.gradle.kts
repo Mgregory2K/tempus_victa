@@ -6,11 +6,9 @@ plugins {
 }
 
 android {
-    namespace = "com.example.mobile"
-    // Plugins used by Tempus require newer compileSdk/NDK.
-    // Backward compatible at runtime.
-    compileSdk = 36
-    ndkVersion = "28.2.13676358"
+    namespace = "com.example.tempus_victa"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -23,11 +21,11 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.mobile"
+        applicationId = "com.example.tempus_victa"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = 36
+        targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

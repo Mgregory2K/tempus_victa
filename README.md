@@ -1,23 +1,17 @@
-# Tempus Mobile (Phase 0)
+# tempus_victa
 
-This repo includes the authoritative `lib/` source for the Flutter app.
+A new Flutter project.
 
-Because the build environment may differ per machine, the platform folders
-(`android/`, `ios/`, etc.) should be generated with `flutter create` and then
-the `lib/` folder from this repo should be used as-is.
+## Getting Started
 
-## Quick start
+This project is a starting point for a Flutter application.
 
-From `mobile/`:
+A few resources to get you started if this is your first Flutter project:
 
-1) Generate project (once)
-- `flutter create tempus_app`
+- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
+- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
 
-2) Replace `tempus_app/lib/` with this repo's `mobile/tempus_app/lib/`
-
-3) Add dependencies in `pubspec.yaml` (this repo includes one)
-
-4) Configure API base URL in `lib/config/env.dart`
-
-5) Run
-- `flutter run`
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.
