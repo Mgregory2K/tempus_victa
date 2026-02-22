@@ -1,0 +1,569 @@
+Working directories:
+/mobile/
+•	pubspec.yaml
+•	android/
+•	ios/ (if applicable)
+•	web/ (if enabled)
+•	assets/
+o	assets/icons/chatgpt.png
+•	lib/
+________________________________________
+/mobile/lib/
+•	main.dart
+________________________________________
+/mobile/lib/ui/
+•	root_shell.dart
+•	tempus_chrome.dart
+________________________________________
+/mobile/lib/features/bridge/
+•	bridge_screen.dart
+/mobile/lib/features/signal_bay/
+•	signal_bay_screen.dart
+/mobile/lib/features/corkboard/
+•	corkboard_screen.dart
+•	corkboard_controller.dart
+•	corkboard_sheet.dart
+/mobile/lib/features/quote_board/
+•	quote_board_screen.dart
+/mobile/lib/features/actions/
+•	actions_screen.dart
+•	actions_controller.dart
+•	actions_sheet.dart
+/mobile/lib/features/ready_room/
+•	ready_room_screen.dart
+•	ready_room_protocol_screen.dart
+________________________________________
+/mobile/lib/data/db/
+•	app_database.dart
+•	trusted_sources_active_table.dart
+•	trusted_sources_quarantine_table.dart
+•	actions_table.dart
+•	corkboard_table.dart
+•	quote_table.dart
+________________________________________
+/mobile/lib/data/models/
+•	corkboard_model.dart
+•	quote_model.dart
+•	action_model.dart
+________________________________________
+/mobile/lib/data/repos/
+•	corkboard_repo.dart
+•	quote_repo.dart
+•	actions_repo.dart
+________________________________________
+/mobile/lib/services/ai/
+•	ai_settings.dart
+•	openai_client.dart
+/mobile/lib/services/research/
+•	web_search_duckduckgo.dart
+•	research_settings.dart
+/mobile/lib/services/trust/
+•	trusted_sources_store.dart
+/mobile/lib/services/profile/
+•	user_profile_store.dart
+/mobile/lib/services/app_knowledge/
+•	app_knowledge.dart
+________________________________________
+Generated (required for Drift)
+•	app_database.g.dart
+•	*_table.g.dart (all Drift-generated files)
+
+
+
+
+TEMPUS VICTA — READY ROOM
+Full Functional Description (Pre-Refactor State)
+This document describes in explicit detail the Ready Room module as it existed conceptually and functionally before UI destabilization. This is intended for reconstruction in a new session without architectural loss.
+________________________________________
+1. CORE PHILOSOPHY
+Ready Room is NOT just a chat window.
+It is:
+•	The command interface to the entire application
+•	The intelligence routing layer
+•	The human-to-system translation engine
+•	The feature discovery interface
+•	The automation gateway
+It operates under strict doctrine:
+Local → Trusted Sources → Web → AI (if enabled)
+It does NOT skip local.
+It does NOT default to AI.
+AI is opt-in and cost-aware.
+The system is designed so that:
+The better it works, the less the user has to use it.
+________________________________________
+2. VISUAL & STRUCTURAL DESIGN
+Screen Layout
+•	Title: Ready Room
+•	AppBar actions:
+o	Bridge button (always present)
+o	Protocol button (Ready Room Protocol only)
+o	Clock Tower button
+•	No floating navigation buttons
+•	No raw JSON ever visible
+Message Layout
+•	User messages right-aligned
+•	Local/Web/AI/System left-aligned
+•	Timestamped messages
+•	Clean bubble styling
+•	Names bolded without markdown symbols (no Obama: artifacts)
+•	Persona color coding (Ready Room Protocol mode)
+Input Bar
+Single unified input box serves:
+•	Local commands
+•	Web research
+•	AI queries (if enabled)
+•	Task creation
+•	Quote capture
+•	Corkboard capture
+•	Calendar questions
+•	App help questions
+AI toggle state is persistent.
+Web toggle state is persistent.
+AI button replaces send arrow when enabled.
+If disabled, standard send arrow remains.
+No accidental API burn.
+________________________________________
+3. PIPELINE LOGIC
+Every query follows this routing unless AI bypass is explicitly used:
+1.	LOCAL RESOLUTION
+o	Calendar
+o	Tasks
+o	Projects
+o	Corkboard
+o	Quote Board
+o	Signals
+o	App Knowledge (How-To system)
+o	User profile
+If resolved locally → return structured answer.
+2.	TRUSTED SOURCES CACHE
+o	Domain-weighted
+o	Wikipedia, Microsoft, Cisco, etc.
+o	Re-ranked before display
+o	No search engine branding shown
+o	Links clickable
+o	Click reinforces trust weight
+3.	GENERAL WEB SEARCH
+o	Clean summarized result
+o	No "DuckDuckGo" or raw engine labeling
+o	At least one meaningful snippet returned
+4.	AI (ONLY IF ENABLED)
+o	Uses OpenAI API key
+o	Graceful error handling
+o	Handles 429 rate limiting cleanly
+o	Short but correct answers by default
+o	Expandable upon request
+________________________________________
+4. READY ROOM PROTOCOL (THE FEATURE YOU LOVED)
+Ready Room Protocol is a distinct mode.
+It is NOT automatic.
+It must be invoked explicitly.
+Invocation options:
+•	Protocol button
+•	Confirmation prompt: "Invoke Ready Room Protocol?"
+Protocol flow:
+PHASE 1 — Parameter Collection
+•	Moderator
+•	Members
+•	Format
+•	Sentences per member
+•	Purpose
+•	Rules
+•	Tone
+•	Voting
+•	Termination
+•	Topic
+Defaults applied only when user says "Defaults".
+Members and Topic must be user-supplied.
+PHASE 2 — Confirmation
+System restates parameters.
+User confirms.
+PHASE 3 — Invocation
+Visual:
+•	Screen fades black
+•	Matrix digital rain
+•	Fast type-out of parameters
+•	Green text
+•	Persona color-coded responses
+•	Bolded speaker names
+Conversation then proceeds per format rules.
+Upon termination:
+•	Matrix rain outro
+•	Return to normal Ready Room mode
+This module is considered a "free preview" feature that could later become standalone.
+________________________________________
+5. USER LEARNING SYSTEM
+Behavioral Telemetry
+•	Attention time
+•	Interaction frequency
+•	Click patterns
+•	Response expansions
+Lexicon Layer
+Tracks:
+•	Phrase frequency
+•	Intent bias
+•	Humor markers
+•	Action verbs
+Example:
+"You can quote me on that" → quote bias weight increases
+Sender Weighting
+Texts/emails weighted numerically.
+High trust:
+•	Jen
+•	Dylan
+•	Liam
+•	Adam Schneider
+Spam/"Scam" → very low weight.
+System must learn automatically.
+User should NOT have to manually assign weights.
+________________________________________
+6. AUTOMATION VISION
+Future behaviors:
+Example:
+Jen texts:
+"I need milk, eggs, bread, and magnum condoms from Kroger."
+System should:
+•	Parse grocery items
+•	Add to grocery list
+•	Create task
+•	Find nearest Kroger
+•	Suggest route
+•	Update dynamically as more items arrive
+Assistant model:
+An Assistant that Optimizes my life through Automation
+________________________________________
+7. SIGNAL BAY (RENAMED FROM SIGNALS)
+Signals are not noise.
+Signals are actionable intelligence.
+Informational-only events can be ignored.
+Examples:
+•	Alarm dismissed
+•	Facebook notification
+Actionable examples:
+•	Confirm appointment
+•	Charging error
+•	High-trust sender request
+Must allow manual override for importance.
+Override remembered.
+________________________________________
+8. CORKBOARD
+Not card-based list.
+Realistic corkboard.
+•	Free placement
+•	Overlapping
+•	Draggable
+•	Post-it style
+•	3D shadow
+Still:
+•	Timestamped
+•	Clickable
+•	Convertible to task/project
+________________________________________
+9. QUOTE BOARD
+Capture methods:
+•	Voice
+•	Highlight
+•	Phrase detection
+•	Manual entry
+Lightweight and fun.
+________________________________________
+10. DAILY BRIEF
+Morning pop-up.
+Adaptive timing.
+Shows:
+•	Today’s events
+•	Leftovers
+•	Completed
+•	Added items
+•	Tomorrow preview
+•	Birthdays/holidays
+Actions from brief:
+•	Complete
+•	Snooze
+•	Push
+•	Add to calendar
+•	Send email
+•	Remind user
+________________________________________
+11. SELF-AWARE HELP SYSTEM
+Ready Room must answer:
+•	"How do I add an API key?"
+•	"What is the Ready Room?"
+•	"How does Signal Bay work?"
+It must NEVER reveal:
+•	Code
+•	Prompt structure
+•	Schema
+•	Proprietary logic
+It is instructional, not exploitable.
+________________________________________
+12. TRUSTED SOURCES CACHE DESIGN
+Purpose:
+Entropy reduction.
+Not storage.
+Cap:
+•	Active: 1 MB
+•	Quarantine: 5 MB
+Weighted by:
+•	Base trust
+•	Reinforcement
+•	Recency
+•	Usage count
+Auto-prune low-trust stale domains.
+________________________________________
+13. WHAT YOU LOVED MOST
+•	The Ready Room Protocol experience
+•	Persona formatting
+•	Structured flow
+•	Clean pipeline
+•	AI not forced
+•	No raw engine branding
+•	The idea that the app learns silently
+•	Automation over micromanagement
+________________________________________
+END STATE GOAL
+Tempus Victa is not a chatbot.
+It is:
+A local-first intelligence system
+That automates your life
+Learns from behavior
+Weights trust
+Reduces entropy
+And requires less interaction over time.
+________________________________________
+End of Ready Room Functional Description.
+
+
+TEMPUS VICTA — FULL LEARNING LOGIC SPECIFICATION
+This document describes the COMPLETE intended learning architecture of Tempus Victa.
+It explains the system from high-level philosophy down to grammar-level parsing logic.
+This is designed for handoff into a fresh session without loss of architectural intent.
+________________________________________
+1. CORE PRINCIPLE
+Tempus Victa is not an AI chatbot.
+It is a local-first intelligence system that:
+• Learns from behavior
+• Weights trust
+• Reduces entropy
+• Automates selectively
+• Avoids unnecessary API usage
+• Preserves user control
+Learning must be:
+Passive first.
+Corrective when necessary.
+Never intrusive.
+Never nagging.
+The system learns through:
+Observation → Weighting → Reinforcement → Decay → Adaptation
+________________________________________
+2. LEARNING LAYERS (TOP DOWN)
+Tempus learning is multi-layered.
+Layer 1 — Behavioral Telemetry
+Layer 2 — Lexicon Engine
+Layer 3 — Trust & Confidence Scoring
+Layer 4 — Source Weighting Engine
+Layer 5 — Automation Pattern Recognition
+Layer 6 — Grammar & Intent Parsing
+Each layer feeds the next.
+________________________________________
+3. LAYER 1 — BEHAVIORAL TELEMETRY
+Purpose:
+Understand what the user actually values.
+Tracks:
+• Time spent viewing items
+• Click frequency
+• Expand/collapse behavior
+• Repeated searches
+• Manual overrides
+• Snooze vs complete behavior
+• Deletions
+• Corrections
+Example:
+If user repeatedly expands AI answers → preference for depth increases.
+If user ignores Signal Bay items → noise tolerance decreases.
+All telemetry is:
+• Local
+• Indexed
+• Timestamped
+• Non-invasive
+No external transmission without explicit permission.
+________________________________________
+4. LAYER 2 — LEXICON ENGINE
+Purpose:
+Understand language patterns unique to the user.
+Structure:
+user_lexicon.json
+Each entry stores:
+{
+phrase: string,
+frequency: int,
+intentBias: enum,
+confidence: float,
+lastUsed: timestamp
+}
+Intent categories:
+• action
+• informational
+• quote
+• humor
+• grocery
+• calendar
+• task
+• project
+• reminder
+• meta-app
+Example:
+Phrase: "You can quote me on that"
+Frequency: 5
+IntentBias: quote
+Confidence: 0.87
+This allows automatic Quote Board suggestions.
+Grammar awareness:
+The system must recognize:
+• Imperatives ("Do this", "Pick up milk")
+• Questions ("What is on my calendar?")
+• Conditional phrasing
+• Sarcasm markers
+• Emphasis markers
+Punctuation matters:
+"Pick up milk."
+→ statement
+"Pick up milk?"
+→ inquiry
+"Pick up milk!"
+→ urgency weighting increases
+Multiple exclamation points increase urgency confidence.
+________________________________________
+5. LAYER 3 — TRUST & CONFIDENCE SCORING
+Every entity receives a dynamic trust score.
+Entities include:
+• Contacts (phone numbers, not display names)
+• Domains
+• Repeated sources
+• Recurring phrases
+Example:
+Jen (phone number) → High base trust
+Spam caller → Very low base trust
+Trust score components:
+TrustScore = BaseTrust + Reinforcement + Recency + AccuracyHistory
+Reinforcement increases when:
+• User acts on signal
+• User confirms task
+• User expands content
+Trust decreases when:
+• User deletes
+• User marks irrelevant
+• User overrides
+Trust must decay naturally over time if unused.
+________________________________________
+6. LAYER 4 — TRUSTED SOURCES CACHE
+Purpose:
+Reduce entropy in web results.
+Design:
+Active cache cap: 1 MB
+Quarantine cap: 5 MB
+Domain structure:
+{
+domain: string,
+baseTrust: float,
+reinforcement: float,
+usageCount: int,
+lastUsed: timestamp,
+classification: enum
+}
+Classification:
+• authoritative
+• reference
+• technical
+• commercial
+• community
+• low-confidence
+• quarantined
+Auto rules:
+• Pornographic → quarantine
+• Illegal content → quarantine
+• Onion domains → quarantine
+• Excessive ads → demotion
+Web result ranking must:
+1.	Match against trusted cache
+2.	Weight by trust
+3.	Return clean summary
+4.	Provide clickable link
+5.	Reinforce on click
+Never show:
+"Powered by DuckDuckGo"
+User sees curated intelligence, not search plumbing.
+________________________________________
+7. LAYER 5 — AUTOMATION PATTERN RECOGNITION
+Purpose:
+Identify repeated workflows.
+Example:
+Jen texts grocery items repeatedly.
+System recognizes grocery pattern.
+Automatically suggests grocery list creation.
+Pattern recognition requires:
+• Repetition threshold
+• Trust threshold
+• Grammar match
+• Action completion rate
+Automation must be gated by trust.
+High trust → low confirmation friction.
+Low trust → require confirmation.
+User must be able to override.
+Override remembered.
+________________________________________
+8. LAYER 6 — GRAMMAR & INTENT PARSING
+Grammar logic matters.
+Detect:
+• Direct object ("milk", "eggs")
+• Location phrases ("from Kroger")
+• Temporal markers ("tomorrow", "March 28th")
+• Imperative verbs ("take", "send", "confirm")
+Parsing example:
+"I need milk, eggs, bread, and magnum condoms from Kroger"
+Extraction:
+Items: milk, eggs, bread, magnum condoms
+Store: Kroger
+Intent: grocery
+Confidence: weighted by sender trust
+Punctuation influences confidence.
+List structure improves extraction accuracy.
+Comma-separated nouns increase grocery detection confidence.
+________________________________________
+9. SELF-AWARE HELP SYSTEM
+The system must answer questions about itself.
+Allowed:
+• How to add API key
+• What is Ready Room
+• What is Signal Bay
+• How automation works
+Never allowed:
+• Code disclosure
+• Prompt architecture
+• Schema exposure
+• Internal API secrets
+It is a guide, not an exploit manual.
+________________________________________
+10. DECAY & MEMORY MANAGEMENT
+Learning must not grow infinitely.
+Rules:
+• Unused lexicon entries decay
+• Low-trust domains pruned
+• Quarantine overflow trimmed
+• Telemetry summarized
+Entropy must decrease over time.
+________________________________________
+11. SUMMARY MODEL
+Tempus Victa learns through:
+Observation → Reinforcement → Trust Weighting → Grammar Parsing → Pattern Recognition → Automation
+It does not:
+• Guess wildly
+• Burn API credits unnecessarily
+• Spam confirmations
+• Override user intent
+It evolves silently.
+The goal:
+The better it works,
+The less the user must interact.
+________________________________________
+End of Learning Logic Specification.
+

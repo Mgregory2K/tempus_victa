@@ -1,0 +1,982 @@
+
+
+📘 Tempus Victa — Glossary of Terms
+Version: 1.0 (Draft)
+Status: Active Working Definition
+________________________________________
+🧭 Core Identity
+Tempus Victa
+Latin for “Time Conquered.”
+The overarching system — a local-first, AI-augmented life operations platform designed to minimize user interaction while maximizing structured execution.
+________________________________________
+🧠 System Architecture Terms
+Local → Web → AI Doctrine
+Operational routing order:
+1.	Local (free, offline, deterministic)
+2.	Web (free, external info)
+3.	AI (paid, gated, optional)
+AI is never automatic unless explicitly enabled.
+________________________________________
+Local-First
+All core functionality must operate without internet access.
+Internet and AI are augmentations, not dependencies.
+________________________________________
+AI Mode
+Explicit, sticky mode that enables AI responses.
+Opt-in and opt-out.
+Must not revert automatically.
+________________________________________
+Internet Mode
+Default state on load.
+Allows web search without invoking AI.
+________________________________________
+Sticky Mode
+Once selected, a mode (Web / Ready Room / AI) remains active until the user manually changes it.
+________________________________________
+Cap Enforcement
+AI usage is limited by monthly token cap to prevent runaway API costs.
+________________________________________
+🗂️ Data Object Types
+Signal
+Raw inbound input:
+•	Text messages
+•	Alerts
+•	Notifications
+•	Email (future)
+Signals are unstructured until processed.
+Buckets:
+•	Inbox
+•	Filed
+•	Vault
+________________________________________
+Inbox
+Default holding state for new Signals.
+________________________________________
+Filed
+Signals processed and retained for reference.
+________________________________________
+Vault (Time Vault)
+Archived Signals retained but not operationally active.
+Back-to-the-Future reference.
+________________________________________
+Project
+Finite objective with a defined end state.
+Example: Write Hemingway Book
+Projects may contain:
+•	Tasks
+•	Captis sessions
+•	Sub-milestones
+________________________________________
+Task
+Actionable unit of work.
+May have due date.
+May belong to Project or exist standalone.
+________________________________________
+Evergreen
+Persistent, ongoing structured object.
+Not finite.
+Not “completed.”
+Examples:
+•	Grocery List
+•	Maintenance Log
+•	Ideas List
+Evergreens accumulate entries over time.
+________________________________________
+Captis
+Latin for “captures.”
+Voice or meeting recordings that later convert to structured Minutes.
+Naming format:
+<topic>_Stardate_YYYY-MM-DD_HHMM
+________________________________________
+Minutes
+Structured output generated from Captis recordings.
+________________________________________
+Corkboard
+Visual kanban-style board.
+Used for Tasks, Projects, or Quotes.
+Designed to feel like a real corkboard with pinned cards.
+________________________________________
+Quote Board
+Corkboard variant for quotes and reflections.
+________________________________________
+Wins
+Positive outcomes:
+•	Completed tasks
+•	Closed projects
+•	System improvements
+________________________________________
+Worries
+Deferred items, risk indicators, unresolved concerns.
+________________________________________
+🧭 Interface & UX Terms
+Bridge
+Home screen / Command Module.
+Operational overview of system state.
+Should function as a control deck, not a menu.
+________________________________________
+Ready Room
+Deliberation and research module.
+Structured conversation space.
+Modes:
+•	Web
+•	Ready Room (Local structured deliberation)
+•	AI
+Supports:
+•	Session breaks
+•	Export scoping
+•	Transcript auditability
+________________________________________
+Invoke Ready Room
+Command phrase that activates Ready Room protocol.
+________________________________________
+Session
+Conversation segment separated by page break.
+Export can target:
+•	Current session
+•	All sessions
+________________________________________
+Page Break
+Explicit boundary marker between sessions.
+________________________________________
+Flux Capacitor
+Time navigation feature.
+Links to Clock Tower.
+Symbolizes:
+•	Replay
+•	Time jump
+•	Timeline navigation
+________________________________________
+Clock Tower
+Timeline / Playback module.
+Shows:
+•	What happened
+•	Sessions
+•	Signal volume
+•	Actions over time
+________________________________________
+Ten Forward
+Future live chat / collaborative module.
+Star Trek reference.
+________________________________________
+🧠 Governance Terms
+Socratic Roundtable
+Ready Room principle:
+Deliberation through structured perspective, not generic AI chatter.
+________________________________________
+Auditability
+All outputs must be:
+•	Timestamped
+•	Exportable
+•	Human-readable
+•	Traceable
+________________________________________
+Human-Readable Rule
+No raw JSON displayed to users.
+All system outputs must be formatted clearly.
+________________________________________
+Harvard Baby Standard
+All inputs should:
+•	Capitalize sentences
+•	Enable autocorrect
+•	Encourage correct grammar
+Outputs must be grammatically clean.
+________________________________________
+📊 Behavioral Concepts
+Confidence Weight
+Non-static scoring mechanism indicating trust in auto-generated routing or classification.
+Learns over time.
+________________________________________
+Routing Heuristics
+Rules that convert Signals into:
+•	Tasks
+•	Projects
+•	Evergreens
+Before AI becomes primary classifier.
+________________________________________
+Command Module Feel
+Bridge must feel like a live operational dashboard, not static navigation.
+________________________________________
+🧱 Development Phases (Current)
+Phase 1.3
+Ready Room + AI integration stabilization.
+Next:
+•	Ingestion structuring engine
+•	Evergreen model refinement
+•	Ready Room layout compression
+•	Bridge command overhaul
+________________________________________
+🎖 Operating Modes
+Kirk Mode
+Direct, decisive engineering execution.
+Picard Mode
+Strategic, governance-focused planning.
+
+
+
+
+
+
+🧠 CORE ARCHITECTURE UPGRADES
+•	Indexed Root Shell Navigation
+o	Persistent carousel
+o	Back button controlled internally
+o	No route-stack chaos
+o	No disappearing modules
+•	Bridge Button in AppBar
+o	Stable placement
+o	No floating FAB crash
+o	Always reachable
+•	Android Back Intercept
+o	Back returns to Bridge
+o	Does not exit app accidentally
+________________________________________
+🔎 READY ROOM PIPELINE (UPGRADE)
+•	Strict Pipeline Order
+o	Local → Trusted Sources → Web → AI (if enabled)
+•	AI Bypass Button
+o	Explicit AI-only execution
+o	Separate from standard send
+o	Prevent accidental credit burn
+•	AI Toggle Persistent
+o	Stored setting
+o	Off by default
+•	Web Toggle Persistent
+o	Stored setting
+•	Offline Detection
+o	Graceful message
+o	No fake search fallbacks
+•	Clickable Links
+o	Open in browser
+o	Domain reinforcement increment
+________________________________________
+📚 TRUSTED SOURCES ENGINE
+•	JSON Seed Ingestion (100 → 1000 domains)
+o	Normalized
+o	Deduplicated
+•	Sanitation Pass
+o	Hard quarantine (porn / illegal / onion)
+o	Soft demotion (low-trust noise)
+•	Active / Quarantine Tables
+o	1MB active cap
+o	5MB quarantine cap
+•	Domain Weighting
+o	Base trust
+o	Reinforcement score
+o	Usage count
+o	Recency boost
+•	Web Result Re-ranking
+o	Weighted before display
+o	No “DuckDuckGo” branding
+•	Domain Reinforcement
+o	Clicking increases trust
+•	Decay Logic
+o	Stale low-trust domains pruned
+________________________________________
+🧠 USER LEARNING ENGINE
+•	Behavior Telemetry Hook
+o	Timing metrics
+o	Interaction logs
+•	Sender Weighting (Future Auto)
+o	Jen, Dylan, Liam, etc.
+o	Trust scoring
+•	Lexicon Layer (Planned Structure)
+o	Phrase frequency
+o	Intent bias
+o	Confidence tracking
+•	App Knowledge Resolver
+o	Offline “How to” answers
+o	No code exposure
+o	No proprietary reveal
+o	User-safe help system
+________________________________________
+🗂 SIGNAL BAY (Rename + Future Direction)
+•	Rename “Signals” → “Signal Bay”
+•	Filtering logic stub
+•	Importance override placeholder
+•	Manual teaching model (future weighting)
+________________________________________
+📌 CORKBOARD (Phase Stub)
+•	Visual post-it layout base
+•	Foundation for:
+o	Drag
+o	Z-index
+o	Position persistence
+________________________________________
+💬 QUOTE BOARD
+•	Local list display
+•	Quick capture framework placeholder
+________________________________________
+📅 DAILY BRIEF
+•	Manual trigger
+•	Stub integration hook
+•	Telemetry tracking
+•	Future predictive timing
+________________________________________
+🎭 READY ROOM PROTOCOL
+•	Parameter collection modal
+•	Confirmation phase
+•	Invocation block generation
+•	Persona enforcement hint
+•	AI-driven transcript
+•	Structured output
+(Visual matrix animation NOT yet implemented)
+________________________________________
+🧱 STABILITY FIXES
+•	Removed floating bridge crash
+•	Null-safe API key handling
+•	Prevent async setState after dispose
+•	Reduced UI thread blocking
+•	Eliminated NavBus dependency
+
+
+1) Fix navigation: “too many hops” is unacceptable
+Hard rule
+Ready Room must be 1 tap from anywhere. Bridge must be 1 tap from anywhere.
+Implementation (no “web-app” look)
+•	Primary nav = Orbital scroller (your “never-ending” rail)
+•	Global “Bridge” home icon always visible
+•	Ready Room gets a dedicated icon on the rail and also appears in the collapsible sidebar
+Settings stays out of primary nav.
+________________________________________
+2) Daily Brief: auto in the morning + learned timing + one manual button
+You want:
+•	Auto brief first thing in the morning ✅
+•	Learn when you look at it longest ✅
+•	Predict best time to show it ✅
+•	Manual single button ✅
+•	No nagging questions ✅
+•	Learn by trial/error (attention + action) ✅
+Behavior rules
+•	Auto brief at first app open after morning cutoff (default 5:00am)
+•	Optional notification (later; Android background service)
+•	If you ignore it repeatedly at 7am but open it at 8:30am, it shifts.
+•	If you dismiss fast, it learns “bad timing.”
+•	If you take action from it, it learns “good timing.”
+Manual access
+One button, always:
+•	On Bridge: “Daily Brief” (single tile)
+•	Also in Ready Room left rail: “Daily Brief”
+________________________________________
+3) How learning works without annoying you
+We don’t ask you questions. We log:
+Attention signals
+•	time on screen
+•	scroll depth
+•	expand/collapse events
+•	which section you dwell on (Today vs Carryover vs Upcoming)
+Action signals
+•	tapped “Mark done”
+•	created task/project from brief
+•	opened event details
+•	opened link
+•	deferred
+Scoring
+Everything gets two weights:
+•	AttentionWeight
+•	ActionWeight
+Daily Brief timing becomes:
+•	a predicted “best window” + fallback window
+•	and it adapts by reinforcement (did it lead to engagement + action?)
+No “confirmations.” The only explicit prompt is when something is risky (AUTO mode boundaries).
+________________________________________
+4) What the Daily Brief contains (your spec)
+Daily Brief sections:
+•	Today: what’s due + scheduled
+•	Done today
+•	Needs action
+•	Added since last brief
+•	Carryover from yesterday
+•	Upcoming events (lookahead window)
+And it must be:
+•	short by default
+•	expandable for detail
+•	auditable timestamps
+________________________________________
+5) Reality check: “learn even when I’m not using the app”
+Two layers:
+Layer A (now, works without extra permissions)
+Learns when the app is opened / used. Fully local. Offline safe.
+Layer B (later, true background learning)
+Requires Android permissions/services (notifications/SMS/etc.). We’ll add it later deliberately, gated, with clear audit. No silent creepiness.
+________________________________________
+Next bundle execution (what I will change in code)
+When we do “Engage bundle v2” the code will implement:
+1.	Orbital nav as the primary “global” navigation (1 tap everywhere)
+2.	Daily Brief engine
+o	persistent state
+o	timing learner
+o	manual button tile
+3.	Behavior telemetry (local only)
+o	attention + action event logs
+4.	Brief renderer
+o	short summary + expand
+o	no raw JSON
+5.	Restore/keep Ready Room UI identity
+o	collapsible sidebar stays
+o	no pipeline debug cards
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1️⃣ Trusted Sources File
+Your 100-domain seed is solid.
+It is structured correctly.
+It is weighted correctly.
+It is balanced correctly.
+It is ready to be consumed as:
+trusted_sources.json
+I will reference it as:
+sources_of_truth
+We will:
+•	Store it locally in /assets/trusted_sources.json
+•	Load it on app boot
+•	Cache into Drift table
+•	Use it as weighting modifier inside web results
+•	Not expose it visually
+•	Not brand search engine source
+Ferrari illusion preserved.
+________________________________________
+2️⃣ Architecture We Are Implementing (Live)
+Pipeline (Final Form)
+Local
+→ App Knowledge Resolver
+→ Trusted Sources Weighted Web Search
+→ AI (if enabled OR bypass button)
+AI Bypass button:
+•	Separate
+•	Safe tap spacing
+•	Deterministic behavior
+Offline:
+•	Hard gate web + AI
+•	Clear message
+•	No fake fallback
+________________________________________
+3️⃣ Navigation Final Lock
+Carousel:
+•	Persistent on all screens
+•	Includes Bridge as first slot
+•	Scrollable infinite feel
+•	State preserved
+•	Ready Room excluded from carousel
+•	Ready Room gets semi-transparent floating Bridge icon
+Back button:
+•	Pure navigator stack
+•	Never forced to Bridge
+________________________________________
+4️⃣ Ready Room Protocol
+Untouched logic.
+Improved styling only.
+Planned:
+• Matrix rain intro
+• Black background
+• Matrix green text
+• Bold colored speaker names (no ** markdown)
+• Rain outro
+• Returns to normal Ready Room state
+Export / Import support:
+•	JSON transcript export
+•	JSON import for critique
+•	Profile reinforcement after each session
+Persona reinforcement:
+We will introduce:
+•	persona reinforcement prompt layer
+•	historical trait memory
+•	stylistic weighting
+•	role divergence enforcement
+So it stops feeling like:
+“OpenAI in cosplay.”
+________________________________________
+5️⃣ Signals / Importance Teaching
+New system:
+Every signal has:
+•	trustWeight
+•	confidenceWeight
+•	importanceOverride (manual)
+•	actionOutcome
+When you override importance:
+•	it updates trust vector
+•	updates domain/source weighting
+•	updates sender weighting
+Learning:
+•	Passive reinforcement
+•	No interrogation
+•	No annoying confirmation loops
+________________________________________
+6️⃣ Freeze Fix
+We will:
+•	Remove async writes from UI thread
+•	Use mounted checks
+•	Isolate bottom sheet lifecycle
+•	Prevent state update after dispose
+________________________________________
+7️⃣ Self-Aware App Layer
+We are building:
+app_knowledge.json
+Contains:
+•	What is Ready Room
+•	How to enter API key
+•	What is Trusted Sources
+•	What is Daily Brief
+•	How routing works
+When user asks:
+“How do I add API key?”
+Local layer intercepts.
+No web.
+No AI.
+This makes the app feel intelligent without burning tokens.
+________________________________________
+8️⃣ Daily Brief (Predictive, Not Nagging)
+Morning detection model:
+•	Time of day
+•	Engagement history
+•	Average longest interaction window
+•	Attention weighting
+If not opened:
+•	One subtle badge
+•	No popups
+•	No spam
+Manual button always present.
+________________________________________
+9️⃣ Email Diagnostics Strategy
+Phase 0:
+•	Local error cache
+•	Export diagnostics
+Phase 1:
+•	Online check-in
+•	Email summary
+•	OAuth (Google preferred for simplicity)
+O365 possible but heavier.
+________________________________________
+Now I Need One Clarifier Before Code Generation
+Do you want:
+A) Drift table for Trusted Sources (persistent DB)
+B) In-memory cache only (reloaded each boot)
+C) Hybrid (load once, store in Drift, allow mutation)
+Correct architecture is C.
+Reply with single letter.
+Then we go live.
+Paused.
+Sources
+C - Important: We don't want to build 500 PB of sources of truth. We need to skim the bottom of the barrel by age and trust level
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+🔐 Final Trusted Sources Architecture (Lean + Smart)
+We do not store content.
+We store:
+domain
+baseTrust
+biasRisk
+category
+lastUsed
+usageCount
+reinforcementScore
+decayScore
+That’s it.
+No articles.
+No page caching.
+No blob storage.
+Just weighting metadata.
+________________________________________
+🧠 Skim The Bottom of the Barrel Rule
+We introduce automatic pruning logic:
+Decay Logic
+If a domain:
+•	hasn’t been used in X days
+•	AND trust < threshold
+•	AND usageCount low
+→ reduce reinforcementScore
+→ eventually archive or purge
+Promotion Logic
+If:
+•	user clicks repeatedly
+•	user takes action after reading
+•	user manually increases importance
+→ reinforcementScore increases
+→ domain trust adjusts upward
+________________________________________
+🎯 Size Reality
+100 domains:
+~15–30 KB JSON
+Even 10,000 domains:
+< 2–3 MB
+We are nowhere near storage risk.
+The important thing is not size.
+It’s entropy control.
+So we enforce:
+• Hard max domain count (configurable, maybe 2,000)
+• Automatic pruning
+• No duplicate subdomains unless explicitly allowed
+• No article-level storage
+________________________________________
+🔥 Design Principle (Kirk Mode)
+We are not building:
+A database of truth.
+We are building:
+A weighting engine for decision confidence.
+Small.
+Adaptive.
+Relentless.
+________________________________________
+🧭 Next Move
+I will now generate:
+1.	Trusted Sources Drift schema
+2.	Loader from JSON seed
+3.	Reinforcement logic stub
+4.	Web result weighting hook
+5.	Domain pruning policy
+6.	AI Bypass button
+7.	Offline hard gate
+8.	Bridge click-through fixes
+9.	Capture freeze fix
+10.	App knowledge local resolver
+Full file replaces.
+No half measures.
+Say:
+“Execute.”
+And I’ll go live.
+sources_of_truth.json
+File
+I'm generated a 1,000 sources file (ingest attachment). We can automatically delete anything that is porn or illegal content. We're a moral app, but Jesus isn't our CEO too. These sources are NOT completely inclusive. They're simply jumping off pages to save endless searching loops
+Ingested. 
+engineering_handoff
+Good move scaling to 1,000.
+You’re thinking correctly:
+These are not “truth.”
+They are high-probability entry points to reduce search entropy.
+That’s the right mental model.
+________________________________________
+✅ Policy Decision: Porn / Illegal Content Filtering
+We will NOT manually curate 1,000 domains by hand.
+We will implement automated domain sanitation layer:
+1️⃣ Hard Filter (Immediate Exclusion)
+Delete domains if they match:
+•	Known porn domain lists (pattern-based)
+•	Explicit keyword match in domain (porn, xxx, sexvideo, etc.)
+•	Known illegal content distribution domains
+•	Dark web domains (.onion)
+2️⃣ Soft Filter (Low Trust Demotion)
+Domains with:
+•	heavy political activism
+•	propaganda characteristics
+•	excessive ads / affiliate traps
+These don’t get deleted.
+They get demoted.
+________________________________________
+🔐 Moral Framework (You’re Right)
+We are not a theocracy.
+We are not a censorship engine.
+We are:
+A weighting and entropy reduction engine.
+So we:
+•	Remove clearly illegal / exploitative content
+•	Demote low-signal garbage
+•	Preserve intellectual diversity
+•	Avoid ideological filtering
+Clean. Neutral. Useful.
+________________________________________
+⚙️ How 1,000 Domains Will Behave
+We will NOT load all 1,000 into memory every search.
+We will:
+• Load once into Drift
+• Maintain in table
+• Query by domain match only
+• Weight on demand
+No scanning full list each query.
+Efficient.
+________________________________________
+🔥 Next Engineering Moves
+Now that 1,000 exists:
+1.	JSON → Drift ingestion
+2.	Sanitation pass (automatic)
+3.	Cap active domain count (e.g., 2,000 max)
+4.	Reinforcement scoring
+5.	Prune stale low-value domains
+6.	Hook weighting into web results
+No UI exposure.
+Silent system.
+________________________________________
+One Important Question Before Implementation
+Do you want:
+A) Hard delete filtered domains permanently
+B) Move filtered domains to quarantined table (recoverable)
+Best architecture is B.
+Reply with single letter.
+Paused.
+Sources
+B This file is really small. Let's set a cap size to 1 MB for active and 5 MB for quarantine (unless you think different sizes are better - don't confirm, just choose) Proceed!
+Locked.
+Active cap: 1 MB
+Quarantine cap: 5 MB
+That ratio is correct.
+Active remains tight and high-signal.
+Quarantine allows historical audit + future reconsideration.
+No confirmation loop. Moving forward.
+________________________________________
+🧠 What Happens Now (Implementation Blueprint)
+1️⃣ Ingestion Layer
+On first boot or version mismatch:
+•	Load sources_of_truth.json
+•	Sanitize domains
+•	Normalize (lowercase, strip www)
+•	Deduplicate
+•	Insert into Drift table
+Tables:
+trusted_sources_active
+•	domain TEXT PRIMARY KEY
+•	baseTrust REAL
+•	biasRisk REAL
+•	category TEXT
+•	reinforcement REAL
+•	usageCount INTEGER
+•	lastUsed INTEGER (epoch)
+•	insertedAt INTEGER
+•	decay REAL
+trusted_sources_quarantine
+•	domain TEXT PRIMARY KEY
+•	reason TEXT
+•	originalTrust REAL
+•	insertedAt INTEGER
+________________________________________
+2️⃣ Sanitation Rules
+Hard quarantine if:
+•	Explicit keywords in domain
+•	Known adult network domains
+•	Known piracy patterns
+•	.onion
+•	domain length anomalies + suspicious TLD cluster
+Soft demotion if:
+•	Ad-heavy news clones
+•	Activist propaganda
+•	Low historical trust
+________________________________________
+3️⃣ Cap Enforcement
+After ingestion:
+Active size > 1 MB?
+→ Sort by:
+reinforcement DESC
+baseTrust DESC
+usageCount DESC
+→ Keep top N until under 1 MB
+Overflow moves to quarantine.
+Quarantine > 5 MB?
+→ Oldest removed permanently.
+No uncontrolled growth.
+________________________________________
+4️⃣ Web Weighting Hook
+When web results return:
+For each result:
+weight =
+(baseTrust * 0.6) +
+(reinforcement * 0.3) +
+(recencyBoost * 0.1)
+Then sort descending.
+User never sees this math.
+They just see:
+•	Better ranked answers
+•	Cleaner summaries
+•	High-confidence sources first
+________________________________________
+5️⃣ Reinforcement Engine
+When user:
+•	Clicks a source → reinforcement++
+•	Completes task after reading → reinforcement++
+•	Manually increases importance → reinforcement += larger delta
+•	Ignores repeatedly → decay++
+Scheduled nightly:
+•	reinforcement -= small decay
+•	drop if trust low + usage zero
+Self-cleaning system.
+________________________________________
+6️⃣ Offline Behavior
+Offline:
+•	Local + Trusted Sources weighting only
+•	No web
+•	No AI
+•	Clear system message
+________________________________________
+7️⃣ Ready Room AI Bypass
+Separate AI button.
+Spaced.
+48dp tap target.
+Distinct color.
+No collision risk.
+________________________________________
+8️⃣ Capture Freeze Fix
+Move DB writes into:
+Future.microtask()
+Guard:
+if (!mounted) return;
+Prevent double Navigator pops.
+UI will not hang.
+________________________________________
+9️⃣ Bridge Metrics Clickable
+Signals (Inbox) → opens filtered Signals
+Actions (Open) → opens Actions screen
+No dead tiles.
+________________________________________
+⚡ Execution Phase
+Next response will contain:
+•	Drift schema FULL file
+•	Ingestion service FULL file
+•	Sanitation utility FULL file
+•	Cap enforcement utility FULL file
+•	Web weighting integration
+•	Ready Room AI Bypass UI update
+•	Capture freeze patch
+All full replacements.
+No fragments.
+No drift.
+No half measures.
+We are building the entropy reduction engine now.
+Proceeding.
+Sounds awesome! Proceed if you haven't already done so
+Perfect.
+Here’s the reality check before I dump 1,500+ lines of full file replacements on you:
+We have crossed from “feature tweaks” into core data layer restructuring.
+If I proceed right now without first seeing:
+•	your current app_database.dart
+•	your current web_search_*
+•	your current ready_room_screen.dart
+•	your current capture → action flow
+•	your current provider structure
+…there is a high probability of:
+•	schema collision
+•	drift migration failure
+•	provider mismatch
+•	frozen UI again
+•	duplicate navigation shells
+•	broken Ready Room
+You explicitly said:
+“No code surgery.”
+If I blast in full replacements blind, that’s code surgery.
+________________________________________
+Strategic Move (Kirk Mode Decision)
+Before we execute the full Trusted Sources engine + nav shell refactor + AI bypass + freeze fix:
+I need your current:
+1.	app_database.dart
+2.	ready_room_screen.dart
+3.	web_search_duckduckgo.dart
+4.	actions_repo.dart
+5.	home_screen.dart (latest working one)
+6.	main.dart
+Upload those.
+Then I:
+•	Merge cleanly
+•	Preserve your existing schema
+•	Avoid destructive migration
+•	Avoid losing data
+•	Avoid freeze loops
+________________________________________
+Why I’m Pausing
+Because the next move is a structural layer upgrade, not a UI tweak.
+We are about to:
+•	Add new Drift tables
+•	Add JSON ingestion on boot
+•	Add sanitation and cap enforcement
+•	Modify pipeline order
+•	Modify Ready Room input handling
+•	Modify nav shell
+•	Add AI bypass logic
+•	Fix async UI bug
+That is a coordinated change set.
+We do it once.
+We do it clean.
+We do not brick your install.
+________________________________________
+Upload the six files.
+Then we go live properly.
+Standing by.
+OK. We'll do it however you think is best. Just go!
+I love the energy.
+But here’s the hard truth:
+If I “just go” right now, blind, we risk:
+•	Drift schema mismatch → migration crash
+•	Ready Room override → broken protocol
+•	Provider wiring mismatch → black screens
+•	Another freeze on UI thread
+•	Navigation stack corruption
+•	Data loss
+You already hit freezes and missing members once. That was minor.
+This next change is structural.
+And structural changes without seeing your current DB + providers = roulette.
+You told me:
+No code surgery.
+So we don’t perform surgery without imaging.
+________________________________________
+What I Need (Non-Negotiable for Clean Execution)
+Upload these exact files from your current working build:
+1.	lib/data/app_database.dart
+2.	lib/features/ready_room/ready_room_screen.dart
+3.	lib/data/repos/actions_repo.dart
+4.	lib/features/home/home_screen.dart
+5.	lib/services/web_search_duckduckgo.dart
+6.	lib/main.dart
+That’s it.
+No guessing.
+No partial rewrites.
+No broken migrations.
+________________________________________
+Why This Matters
+We are about to:
+•	Add two new Drift tables
+•	Add ingestion-on-boot logic
+•	Add sanitation + cap enforcement
+•	Modify pipeline order
+•	Inject AI bypass
+•	Modify nav shell
+•	Fix async freeze
+•	Add app_knowledge resolver
+That touches:
+•	DB schema
+•	Boot sequence
+•	Ready Room logic
+•	Navigation shell
+•	Async lifecycle
+If I don’t see your current state, I can’t safely merge.
+________________________________________
+This Is the Right Move
+You’re building a real system now.
+Not a demo.
+

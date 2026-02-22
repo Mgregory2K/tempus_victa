@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "generatedAtUtc": "YYYY-MM-DDTHH:MM:SSZ",
+  "user": {
+    "preferredName": null,
+    "aliases": [],
+    "timezone": "America/New_York",
+    "devices": {
+      "primaryPhone": "Android",
+      "otherDevices": []
+    },
+    "communicationPreferences": {
+      "tone": {
+        "default": "concise",
+        "likes": ["dad jokes", "sarcasm", "movie references", "football references"],
+        "flags": ["phone_lazy_inputs", "outcome_first"]
+      },
+      "accessibility": {
+        "adhdFriendlyCapture": true,
+        "prefersVoiceCapture": true
+      }
+    }
+  },
+  "lifeOperatingSystem": {
+    "goals": [],
+    "constraints": [
+      "local_first",
+      "offline_first",
+      "no_background_breakage"
+    ],
+    "values": [
+      "simplicity",
+      "max_security",
+      "scalable_learning"
+    ]
+  },
+  "appUsageSignals": {
+    "topModules": [],
+    "commonIntents": [],
+    "capturePatterns": {
+      "voiceCapture": {
+        "enabled": true,
+        "typicalUse": ["rapid idea capture", "adhd brain dump"],
+        "preferredTarget": "signal_bay"
+      }
+    }
+  },
+  "preferences": {
+    "ai": {
+      "defaultEnabled": false,
+      "optInOnly": true,
+      "notes": "AI must never trigger unless explicitly enabled."
+    },
+    "web": {
+      "defaultEnabled": true,
+      "notes": "Web must never return empty; fallback link allowed."
+    }
+  },
+  "trustModel": {
+    "peopleTrustTiers": [
+      {
+        "label": "Jen-level",
+        "trust": 1.0,
+        "notes": "Highest trust tier."
+      }
+    ],
+    "domains": {
+      "reinforcementOnClick": true,
+      "decay": {
+        "enabled": true,
+        "halfLifeDays": 60
+      }
+    }
+  },
+  "synonyms": {
+    "learnedMappings": [
+      {
+        "phrase": null,
+        "capabilityId": null,
+        "count": null,
+        "lastUsedEpochMs": null
+      }
+    ],
+    "notes": "This is populated by the app over time; other chats can suggest likely phrases but do not invent."
+  },
+  "notes": [
+    "Leave unknown fields null. Do not guess."
+  ]
+}

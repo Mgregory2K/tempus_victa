@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "generatedAtUtc": "YYYY-MM-DDTHH:MM:SSZ",
+  "events": {
+    "nav_to_module": { "weight": 0.6 },
+    "open_module": { "weight": 0.4 },
+    "create_signal": { "weight": 1.2 },
+    "create_action": { "weight": 1.4 },
+    "complete_action": { "weight": 2.2 },
+    "mark_signal_important": { "weight": 1.8 },
+    "mark_signal_noise": { "weight": 1.5 },
+    "open_external_link": { "weight": 0.7 },
+    "reinforce_domain_on_click": { "weight": 1.0 }
+  },
+  "scoring": {
+    "decay": {
+      "enabled": true,
+      "halfLifeDays": 45,
+      "minFloor": 0.05
+    },
+    "caps": {
+      "maxSynonymEntries": 200,
+      "maxDomainEntriesActive": 1000,
+      "maxDomainEntriesQuarantine": 5000
+    }
+  },
+  "notes": [
+    "Weights are relative, not absolute. Completion > creation > navigation.",
+    "Decay prevents early behavior from overfitting forever."
+  ]
+}

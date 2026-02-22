@@ -1,0 +1,38 @@
+name: mobile
+description: Tempus Victa - Assistant OS
+publish_to: "none"
+
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.2
+
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  provider: ^6.1.1
+
+  # Modern speech plugin (NO Registrar)
+  speech_to_text: ^7.0.0
+
+  receive_sharing_intent: ^1.4.5
+  permission_handler: ^11.3.1
+  path_provider: ^2.1.4
+  uuid: ^4.3.3
+  intl: ^0.18.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+    - assets/legacy_user_profiles/
