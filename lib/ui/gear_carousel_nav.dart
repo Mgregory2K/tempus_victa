@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'modules.dart';
 
 class GearCarouselNav extends StatefulWidget {
+  final List<ModuleDef> modules;
   final int selectedIndex;
   final ValueChanged<int> onSelect;
+  final VoidCallback onRequestReorder;
 
   const GearCarouselNav({
     super.key,
+    required this.modules,
     required this.selectedIndex,
     required this.onSelect,
+    required this.onRequestReorder,
   });
 
   @override
@@ -22,7 +26,7 @@ class _GearCarouselNavState extends State<GearCarouselNav> {
 
   late final PageController _controller;
 
-  int get _n => kPrimaryModules.length;
+  int get _n => widget.modules.length;
   int get _initialPage => (_n * _loopMultiplier) + widget.selectedIndex;
 
   int _lastCommittedIndex = -1;
@@ -51,8 +55,6 @@ class _GearCarouselNavState extends State<GearCarouselNav> {
   }
 
   int _pageWithHalfThreshold(double p) {
-    // Explicit 50% threshold:
-    // If you're >= 0.5 into the next page, snap forward; otherwise snap back.
     final base = p.floor();
     final frac = p - base;
     return (frac >= 0.5) ? base + 1 : base;
@@ -86,10 +88,8 @@ class _GearCarouselNavState extends State<GearCarouselNav> {
       curve: Curves.easeOutCubic,
     );
 
-    // HARD LOCK: remove any tiny fractional drift so the icon is *exactly centered*.
-    // This is the part that fixes the "stops slightly off center" feel.
     if (_controller.hasClients) {
-      _controller.jumpToPage(targetPage);
+      _controller.jumpToPage(targetPage); // hard lock to exact center
     }
 
     _commitIndexForPage(targetPage);
@@ -105,7 +105,6 @@ class _GearCarouselNavState extends State<GearCarouselNav> {
     final basePage = _pageWithHalfThreshold(p);
     final currentModule = _moduleIndexForPage(basePage);
 
-    // Shortest direction around the ring
     int forward = (targetModuleIndex - currentModule) % _n;
     int backward = forward - _n;
     int delta = (forward.abs() <= backward.abs()) ? forward : backward;
@@ -145,10 +144,8 @@ class _GearCarouselNavState extends State<GearCarouselNav> {
               top: 0,
               child: Container(height: 1, color: Colors.white12),
             ),
-
             NotificationListener<ScrollNotification>(
               onNotification: (n) {
-                // Snap only when scrolling fully ends.
                 if (n is ScrollEndNotification) {
                   _snapToNearest();
                 }
@@ -156,11 +153,11 @@ class _GearCarouselNavState extends State<GearCarouselNav> {
               },
               child: PageView.builder(
                 controller: _controller,
-                pageSnapping: false, // free spin
-                physics: const ClampingScrollPhysics(), // Android-friendly, reduces “drifty” settle
+                pageSnapping: false,
+                physics: const ClampingScrollPhysics(),
                 itemBuilder: (context, pageIndex) {
                   final moduleIndex = _moduleIndexForPage(pageIndex);
-                  final mod = kPrimaryModules[moduleIndex];
+                  final mod = widget.modules[moduleIndex];
 
                   return AnimatedBuilder(
                     animation: _controller,
@@ -172,27 +169,30 @@ class _GearCarouselNavState extends State<GearCarouselNav> {
                       final scale = 0.80 + (0.35 * t);
                       final opacity = 0.40 + (0.60 * t);
 
+                      // Only allow reorder when the item is truly centered.
+                      final isCentered = t >= 0.98;
+
                       return Center(
                         child: Opacity(
                           opacity: opacity,
                           child: Transform.scale(
                             scale: scale,
-                            child: child,
+                            child: _NavItem(
+                              icon: mod.icon,
+                              label: mod.name,
+                              onTap: () => _animateToModule(moduleIndex),
+                              onLongPress: isCentered ? widget.onRequestReorder : null,
+                            ),
                           ),
                         ),
                       );
                     },
-                    child: _NavItem(
-                      icon: mod.icon,
-                      label: mod.name,
-                      onTap: () => _animateToModule(moduleIndex),
-                    ),
+                    // child is built inside builder so we can inject isCentered
+                    child: const SizedBox.shrink(),
                   );
                 },
               ),
             ),
-
-            // Center “notch” marker
             Align(
               alignment: Alignment.bottomCenter,
               child: Padding(
@@ -218,17 +218,20 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   const _NavItem({
     required this.icon,
     required this.label,
     required this.onTap,
+    required this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
     return InkResponse(
       onTap: onTap,
+      onLongPress: onLongPress,
       radius: 44,
       child: Padding(
         padding: const EdgeInsets.only(top: 10, bottom: 10),
