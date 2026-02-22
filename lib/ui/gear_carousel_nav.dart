@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'modules.dart';
+import '../core/module_def.dart';
 
 class GearCarouselNav extends StatefulWidget {
   final List<ModuleDef> modules;
@@ -89,7 +89,7 @@ class _GearCarouselNavState extends State<GearCarouselNav> {
     );
 
     if (_controller.hasClients) {
-      _controller.jumpToPage(targetPage); // hard lock to exact center
+      _controller.jumpToPage(targetPage);
     }
 
     _commitIndexForPage(targetPage);
@@ -161,15 +161,13 @@ class _GearCarouselNavState extends State<GearCarouselNav> {
 
                   return AnimatedBuilder(
                     animation: _controller,
-                    builder: (context, child) {
+                    builder: (context, _) {
                       final page = _currentPageDouble();
                       final distance = (pageIndex - page).abs();
 
                       final t = (1.0 - (distance * 0.9)).clamp(0.0, 1.0);
                       final scale = 0.80 + (0.35 * t);
                       final opacity = 0.40 + (0.60 * t);
-
-                      // Only allow reorder when the item is truly centered.
                       final isCentered = t >= 0.98;
 
                       return Center(
@@ -187,8 +185,6 @@ class _GearCarouselNavState extends State<GearCarouselNav> {
                         ),
                       );
                     },
-                    // child is built inside builder so we can inject isCentered
-                    child: const SizedBox.shrink(),
                   );
                 },
               ),

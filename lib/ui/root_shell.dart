@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
-import 'modules.dart';
-import 'room_screen.dart';
-import 'gear_carousel_nav.dart';
-import 'module_order_store.dart';
 
-class AppShell extends StatefulWidget {
-  const AppShell({super.key});
+import '../core/app_state.dart';
+import '../core/app_state_scope.dart';
+import '../core/module_def.dart';
+import '../core/module_order_store.dart';
+import '../core/module_registry.dart';
+import 'gear_carousel_nav.dart';
+
+class RootShell extends StatefulWidget {
+  const RootShell({super.key});
 
   @override
-  State<AppShell> createState() => _AppShellState();
+  State<RootShell> createState() => _RootShellState();
 }
 
-class _AppShellState extends State<AppShell> {
-  // In-memory module order (restored from disk on launch)
-  List<ModuleDef> _modules = List<ModuleDef>.from(kPrimaryModules);
+class _RootShellState extends State<RootShell> {
+  late final AppState _appState;
 
-  // Track selection by ID so reorder does not “change” your current room.
-  String _selectedModuleId = kPrimaryModules.first.id;
-
-  bool get _carouselEnabled => true;
+  List<ModuleDef> _modules = [];
+  String _selectedModuleId = 'bridge';
 
   int get _selectedIndex {
     final idx = _modules.indexWhere((m) => m.id == _selectedModuleId);
@@ -28,6 +28,11 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    _modules = ModuleRegistry.defaultModules();
+    _appState = AppState(
+      selectedModuleId: _selectedModuleId,
+      moduleOrderIds: _modules.map((m) => m.id).toList(),
+    );
     _restoreModuleOrder();
   }
 
@@ -37,49 +42,26 @@ class _AppShellState extends State<AppShell> {
 
     if (savedIds == null) return;
 
-    // Rebuild module list from saved IDs, ignoring unknown IDs,
-    // and appending any new modules not yet saved.
-    final byId = {for (final m in kPrimaryModules) m.id: m};
+    final defaults = ModuleRegistry.defaultModules();
+    final byId = {for (final m in defaults) m.id: m};
 
     final restored = <ModuleDef>[];
     for (final id in savedIds) {
       final m = byId[id];
       if (m != null) restored.add(m);
     }
-
-    // Append any modules added in code since the last save.
-    for (final m in kPrimaryModules) {
-      if (!restored.any((x) => x.id == m.id)) {
-        restored.add(m);
-      }
+    for (final m in defaults) {
+      if (!restored.any((x) => x.id == m.id)) restored.add(m);
     }
 
-    // If the user previously had a selected module that no longer exists,
-    // fall back to first.
-    final selectedStillExists = restored.any((m) => m.id == _selectedModuleId);
-
-    setState(() {
-      _modules = restored;
-      if (!selectedStillExists) {
-        _selectedModuleId = restored.first.id;
-      }
-    });
+    setState(() { _modules = restored; _appState.moduleOrderIds = _modules.map((m) => m.id).toList(growable: false); });
   }
 
   Future<void> _persistModuleOrder() async {
-    final ids = _modules.map((m) => m.id).toList(growable: false);
-    await ModuleOrderStore.saveOrderIds(ids);
-  }
-
-  void _selectByIndex(int idx) {
-    if (idx < 0 || idx >= _modules.length) return;
-    setState(() {
-      _selectedModuleId = _modules[idx].id;
-    });
+    await ModuleOrderStore.saveOrderIds(_modules.map((m) => m.id).toList());
   }
 
   Future<void> _openReorderSheet() async {
-    // Working copy for the modal
     var working = List<ModuleDef>.from(_modules);
 
     final result = await showModalBottomSheet<List<ModuleDef>>(
@@ -109,7 +91,7 @@ class _AppShellState extends State<AppShell> {
                         TextButton(
                           onPressed: () {
                             setModalState(() {
-                              working = List<ModuleDef>.from(kPrimaryModules);
+                              working = ModuleRegistry.defaultModules();
                             });
                           },
                           child: const Text('Reset'),
@@ -120,13 +102,6 @@ class _AppShellState extends State<AppShell> {
                           child: const Text('Done'),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Drag to reorder. You must long-press the centered icon to enter this mode.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.white70,
-                          ),
                     ),
                     const SizedBox(height: 12),
                     ConstrainedBox(
@@ -166,41 +141,43 @@ class _AppShellState extends State<AppShell> {
 
     setState(() {
       _modules = result;
-
-      // Keep same selected room by ID after reorder.
+      _appState.moduleOrderIds = _modules.map((m) => m.id).toList(growable: false);
       if (_modules.indexWhere((m) => m.id == _selectedModuleId) < 0) {
         _selectedModuleId = _modules.first.id;
+        _appState.setSelectedModule(_selectedModuleId);
       }
     });
 
     await _persistModuleOrder();
   }
 
+  void _selectByIndex(int idx) {
+    if (idx < 0 || idx >= _modules.length) return;
+    setState(() { _selectedModuleId = _modules[idx].id; _appState.setSelectedModule(_selectedModuleId); });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final rooms = _modules
-        .map((m) => RoomScreen(roomName: m.name))
-        .toList(growable: false);
+    final rooms = _modules.map((m) => m.builder(roomName: m.name)).toList();
 
-    return Scaffold(
-      body: SafeArea(
-        child: IndexedStack(
+    return AppStateScope(
+      appState: _appState,
+      child: Scaffold(
+        body: IndexedStack(
           index: _selectedIndex,
           children: rooms,
         ),
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: GearCarouselNav(
+            key: ValueKey(_modules.map((m) => m.id).join('|')),
+            modules: _modules,
+            selectedIndex: _selectedIndex,
+            onSelect: _selectByIndex,
+            onRequestReorder: _openReorderSheet,
+          ),
+        ),
       ),
-      bottomNavigationBar: _carouselEnabled
-          ? SafeArea(
-              top: false,
-              child: GearCarouselNav(
-                key: ValueKey(_modules.map((m) => m.id).join('|')),
-                modules: _modules,
-                selectedIndex: _selectedIndex,
-                onSelect: _selectByIndex,
-                onRequestReorder: _openReorderSheet,
-              ),
-            )
-          : null,
     );
   }
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'ui/app_shell.dart';
+import 'ui/root_shell.dart';
 
 void main() {
   runApp(const TempusApp());
@@ -11,13 +11,13 @@ class TempusApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Tempus, Victa',
+      title: 'Tempus Victa',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
         useMaterial3: true,
       ),
-      home: const AppShell(),
+      home: const RootShell(),
     );
   }
 }
