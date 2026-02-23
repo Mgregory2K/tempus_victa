@@ -1,79 +1,163 @@
-import '../data/db/corkboard_db.dart';
-import 'signal_item.dart';
+import 'dart:convert';
+import 'dart:io';
 
-/// Local-first learning signals about how the user treats incoming signals.
-/// This is NOT AI. It's deterministic behavioral learning (counts + ratios),
-/// used to suggest automation rules (mute, auto-pin, auto-promote) later.
-class LearningStore {
-  static Future<void> ensureSchema() async {
-    final db = await CorkboardDb.instance();
-    db.execute('''
-      CREATE TABLE IF NOT EXISTS learning_signal_actions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fingerprint TEXT NOT NULL,
-        source TEXT NOT NULL,
-        action TEXT NOT NULL,
-        created_at_ms INTEGER NOT NULL
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
+enum SignalActionType { toTask, toCorkboard, recycled, acked }
+
+class LearnedSource {
+  final String source; // package or app name
+  final int total;
+  final int toTask;
+  final int toCorkboard;
+  final int recycled;
+  final int acked;
+
+  const LearnedSource({
+    required this.source,
+    required this.total,
+    required this.toTask,
+    required this.toCorkboard,
+    required this.recycled,
+    required this.acked,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'source': source,
+        'total': total,
+        'toTask': toTask,
+        'toCorkboard': toCorkboard,
+        'recycled': recycled,
+        'acked': acked,
+      };
+
+  static LearnedSource fromJson(Map<String, dynamic> j) => LearnedSource(
+        source: (j['source'] ?? '') as String,
+        total: (j['total'] ?? 0) as int,
+        toTask: (j['toTask'] ?? 0) as int,
+        toCorkboard: (j['toCorkboard'] ?? 0) as int,
+        recycled: (j['recycled'] ?? 0) as int,
+        acked: (j['acked'] ?? 0) as int,
       );
-    ''');
-    db.execute('CREATE INDEX IF NOT EXISTS idx_learning_fingerprint ON learning_signal_actions(fingerprint);');
-    db.execute('CREATE INDEX IF NOT EXISTS idx_learning_source ON learning_signal_actions(source);');
+}
+
+class SuggestedRule {
+  final String type; // mute / autoTask / autoCork
+  final String source;
+  final double confidence; // 0..1
+  final String reason;
+
+  const SuggestedRule({required this.type, required this.source, required this.confidence, required this.reason});
+
+  Map<String, dynamic> toJson() => {'type': type, 'source': source, 'confidence': confidence, 'reason': reason};
+
+  static SuggestedRule fromJson(Map<String, dynamic> j) => SuggestedRule(
+        type: (j['type'] ?? '') as String,
+        source: (j['source'] ?? '') as String,
+        confidence: ((j['confidence'] ?? 0) as num).toDouble(),
+        reason: (j['reason'] ?? '') as String,
+      );
+}
+
+class LearningStore {
+  static const _fileName = 'learning_signals_v1.json';
+
+  static Future<File> _file() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File(p.join(dir.path, _fileName));
   }
 
-  static Future<void> recordSignalAction(SignalItem s, String action) async {
-    await ensureSchema();
-    final db = await CorkboardDb.instance();
-    final stmt = db.prepare(
-      'INSERT INTO learning_signal_actions (fingerprint, source, action, created_at_ms) VALUES (?, ?, ?, ?)',
-    );
-    try {
-      stmt.execute([s.fingerprint, s.source, action, DateTime.now().millisecondsSinceEpoch]);
-    } finally {
-      stmt.dispose();
+  static Future<Map<String, dynamic>> _readRaw() async {
+    final f = await _file();
+    if (!await f.exists()) return {'version': 1, 'sources': <String, dynamic>{}, 'updatedAtUtc': DateTime.now().toUtc().toIso8601String()};
+    final txt = await f.readAsString();
+    return (jsonDecode(txt) as Map).cast<String, dynamic>();
+  }
+
+  static Future<void> _writeRaw(Map<String, dynamic> raw) async {
+    final f = await _file();
+    raw['updatedAtUtc'] = DateTime.now().toUtc().toIso8601String();
+    await f.create(recursive: true);
+    await f.writeAsString(jsonEncode(raw), flush: true);
+  }
+
+  static Future<void> record(String source, SignalActionType action) async {
+    final raw = await _readRaw();
+    final sources = (raw['sources'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+
+    final cur = (sources[source] as Map?)?.cast<String, dynamic>() ??
+        {'source': source, 'total': 0, 'toTask': 0, 'toCorkboard': 0, 'recycled': 0, 'acked': 0};
+
+    cur['total'] = (cur['total'] as int) + 1;
+
+    switch (action) {
+      case SignalActionType.toTask:
+        cur['toTask'] = (cur['toTask'] as int) + 1;
+        break;
+      case SignalActionType.toCorkboard:
+        cur['toCorkboard'] = (cur['toCorkboard'] as int) + 1;
+        break;
+      case SignalActionType.recycled:
+        cur['recycled'] = (cur['recycled'] as int) + 1;
+        break;
+      case SignalActionType.acked:
+        cur['acked'] = (cur['acked'] as int) + 1;
+        break;
     }
+
+    sources[source] = cur;
+    raw['sources'] = sources;
+    await _writeRaw(raw);
   }
 
-  /// Returns map[source] -> map[action] -> count
-  static Future<Map<String, Map<String, int>>> summarizeBySource({int days = 30}) async {
-    await ensureSchema();
-    final db = await CorkboardDb.instance();
-    final sinceMs = DateTime.now().subtract(Duration(days: days)).millisecondsSinceEpoch;
-    final rs = db.select(
-      'SELECT source, action, COUNT(*) as c FROM learning_signal_actions WHERE created_at_ms >= ? GROUP BY source, action',
-      [sinceMs],
-    );
-    final out = <String, Map<String, int>>{};
-    for (final row in rs) {
-      final source = row['source'] as String? ?? 'unknown';
-      final action = row['action'] as String? ?? 'unknown';
-      final c = (row['c'] as int?) ?? 0;
-      out.putIfAbsent(source, () => <String, int>{});
-      out[source]![action] = c;
+  static Future<List<LearnedSource>> listSources() async {
+    final raw = await _readRaw();
+    final sources = (raw['sources'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+    return sources.values
+        .whereType<Map>()
+        .map((m) => LearnedSource.fromJson(m.cast<String, dynamic>()))
+        .toList(growable: false)
+      ..sort((a, b) => b.total.compareTo(a.total));
+  }
+
+  static List<SuggestedRule> suggest(List<LearnedSource> sources) {
+    // Minimum samples before we act like we "learned" something.
+    const min = 6;
+    final out = <SuggestedRule>[];
+
+    for (final s in sources) {
+      if (s.total < min) continue;
+
+      final recycleRate = s.recycled / s.total;
+      final taskRate = s.toTask / s.total;
+      final corkRate = s.toCorkboard / s.total;
+
+      if (recycleRate >= 0.80) {
+        out.add(SuggestedRule(
+          type: 'mute',
+          source: s.source,
+          confidence: (recycleRate).clamp(0.0, 1.0),
+          reason: 'You recycle ~${(recycleRate * 100).round()}% of signals from this source.',
+        ));
+      } else if (taskRate >= 0.60) {
+        out.add(SuggestedRule(
+          type: 'autoTask',
+          source: s.source,
+          confidence: (taskRate).clamp(0.0, 1.0),
+          reason: 'You create tasks from ~${(taskRate * 100).round()}% of signals from this source.',
+        ));
+      } else if (corkRate >= 0.55) {
+        out.add(SuggestedRule(
+          type: 'autoCork',
+          source: s.source,
+          confidence: (corkRate).clamp(0.0, 1.0),
+          reason: 'You pin ~${(corkRate * 100).round()}% of signals from this source to the Corkboard.',
+        ));
+      }
     }
-    return out;
-  }
 
-  /// Returns top fingerprints with promote/recycle/pin counts.
-  static Future<List<Map<String, Object?>>> topFingerprints({int limit = 20, int days = 30}) async {
-    await ensureSchema();
-    final db = await CorkboardDb.instance();
-    final sinceMs = DateTime.now().subtract(Duration(days: days)).millisecondsSinceEpoch;
-    final rs = db.select(
-      '''
-      SELECT fingerprint, source,
-        SUM(CASE WHEN action='promote_task' THEN 1 ELSE 0 END) as promote_task,
-        SUM(CASE WHEN action='pin_cork' THEN 1 ELSE 0 END) as pin_cork,
-        SUM(CASE WHEN action='recycle' THEN 1 ELSE 0 END) as recycle,
-        SUM(CASE WHEN action='ack' THEN 1 ELSE 0 END) as ack,
-        COUNT(*) as total
-      FROM learning_signal_actions
-      WHERE created_at_ms >= ?
-      GROUP BY fingerprint, source
-      ORDER BY total DESC
-      LIMIT ?
-      ''',
-      [sinceMs, limit],
-    );
-    return rs.map((row) => row.cast<String, Object?>()).toList(growable: false);
+    out.sort((a, b) => b.confidence.compareTo(a.confidence));
+    return out.take(8).toList(growable: false);
   }
 }

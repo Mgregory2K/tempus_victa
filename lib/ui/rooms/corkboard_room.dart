@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../core/corkboard_store.dart';
 import '../room_frame.dart';
+import '../theme/tempus_theme.dart';
 import '../theme/tempus_ui.dart';
-import '../theme/tv_textfield.dart';
 
 class CorkboardRoom extends StatefulWidget {
   final String roomName;
@@ -17,16 +16,15 @@ class CorkboardRoom extends StatefulWidget {
 }
 
 class _CorkboardRoomState extends State<CorkboardRoom> {
-  final _ctrl = TextEditingController();
+  final GlobalKey _boardKey = GlobalKey();
   List<CorkNoteModel> _notes = const [];
   bool _loading = true;
 
-  // drag state
-  String? _activeId;
-  Offset _dragStartLocal = Offset.zero;
+  String? _dragId;
+  Offset _dragStart = Offset.zero;
   Offset _noteStart = Offset.zero;
 
-  Timer? _debouncePersist;
+  Timer? _persistThrottle;
 
   @override
   void initState() {
@@ -36,306 +34,290 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
 
   @override
   void dispose() {
-    _debouncePersist?.cancel();
-    _ctrl.dispose();
+    _persistThrottle?.cancel();
     super.dispose();
   }
 
   Future<void> _load() async {
-    final list = await CorkboardStore.list();
+    setState(() => _loading = true);
+    final notes = await CorkboardStore.list();
     if (!mounted) return;
     setState(() {
-      _notes = list;
+      _notes = notes;
       _loading = false;
     });
   }
 
-
-  void _bringToFrontLocal(String id) {
-    // No async reload; keep dragging instant.
-    final maxZ = _notes.isEmpty ? 0 : _notes.map((e) => e.z).reduce((a, b) => a > b ? a : b);
-    setState(() {
-      _notes = _notes
-          .map((n) => n.id == id
-              ? n.copyWith(z: maxZ + 1, updatedAtEpochMs: DateTime.now().millisecondsSinceEpoch)
-              : n)
-          .toList(growable: false);
-      _activeId = id;
-    });
-    // Persist z-order in background.
-    // ignore: unawaited_futures
-    CorkboardStore.bringToFront(id);
-  }
-
-
-  Future<void> _add() async {
-    final t = _ctrl.text.trim();
-    if (t.isEmpty) return;
-    _ctrl.clear();
-    await CorkboardStore.addText(t);
+  Future<void> _createAt(Offset local) async {
+    await CorkboardStore.addText('', x: local.dx, y: local.dy);
     await _load();
+    // Immediately open editor for the newest note.
+    final created = _notes.isNotEmpty ? _notes.last : null;
+    if (created != null && mounted) {
+      _edit(created);
+    }
   }
 
-  Color _noteColor(BuildContext context, int idx) {
-    // Soft pastel palette; color is “irrelevant for now”, but we need variety.
-    const palette = [
-      Color(0xFFFFF2A8),
-      Color(0xFFFFD7E5),
-      Color(0xFFBFE8FF),
-      Color(0xFFCFF7D3),
-      Color(0xFFFFE0B8),
-      Color(0xFFE3D4FF),
-      Color(0xFFD9FFF8),
-      Color(0xFFFFF0D6),
-    ];
-    return palette[idx % palette.length];
-  }
-
-  double _rotationFor(String id) {
-    // stable “hand placed” angle per id
-    final h = id.codeUnits.fold<int>(0, (a, b) => a + b);
-    final r = (h % 9) - 4; // -4..+4
-    return r * (math.pi / 180.0);
-  }
-
-  void _schedulePersistPosition(String id, Offset pos) {
-    _debouncePersist?.cancel();
-    _debouncePersist = Timer(const Duration(milliseconds: 220), () async {
-      await CorkboardStore.updatePosition(id, pos.dx, pos.dy);
-    });
-  }
-
-  Future<void> _editNote(CorkNoteModel n) async {
-    final c = TextEditingController(text: n.text);
-    await showModalBottomSheet<void>(
+  Future<void> _edit(CorkNoteModel n) async {
+    final ctrl = TextEditingController(text: n.text);
+    final res = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 12,
-              right: 12,
-              top: 12,
-              bottom: 12 + MediaQuery.of(ctx).viewInsets.bottom,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(child: Text('Edit note', style: TextStyle(fontWeight: FontWeight.w800))),
-                    IconButton(
-                      tooltip: 'Delete',
-                      onPressed: () async {
-                        Navigator.of(ctx).pop();
-                        await CorkboardStore.delete(n.id);
-                        await _load();
-                      },
-                      icon: const Icon(Icons.delete_outline),
-                    )
-                  ],
+        final b = ctx.tv;
+        final bottom = MediaQuery.of(ctx).viewInsets.bottom;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(16, 12, 16, bottom + 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Edit note', style: Theme.of(ctx).textTheme.titleLarge),
+              const SizedBox(height: 10),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                maxLines: 6,
+                textCapitalization: TextCapitalization.sentences,
+                autocorrect: true,
+                enableSuggestions: true,
+                decoration: InputDecoration(
+                  hintText: 'Drop an idea…',
+                  filled: true,
+                  fillColor: b.surface1,
                 ),
-                TvTextField(
-                  controller: c,
-                  hintText: 'Note…',
-                  maxLines: 6,
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () async {
-                      final t = c.text.trim();
-                      if (t.isNotEmpty) {
-                        await CorkboardStore.updateText(n.id, t);
-                        await _load();
-                      }
-                      if (ctx.mounted) Navigator.of(ctx).pop();
-                    },
-                    child: const Text('Save'),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+                      child: const Text('Save'),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
         );
       },
     );
+
+    final v = (res ?? '').trim();
+    if (v.isEmpty) return;
+    await CorkboardStore.updateText(n.id, v);
+    await _load();
+  }
+
+  Future<void> _delete(CorkNoteModel n) async {
+    await CorkboardStore.delete(n.id);
+    await _load();
+  }
+
+  RenderBox? _boardBox() => _boardKey.currentContext?.findRenderObject() as RenderBox?;
+
+  Offset _toBoardLocal(Offset global) {
+    final box = _boardBox();
+    if (box == null) return Offset.zero;
+    return box.globalToLocal(global);
+  }
+
+  void _bringToFront(String id) {
+    // Fire and forget: z-order update happens in DB, refresh later.
+    CorkboardStore.bringToFront(id);
+  }
+
+  void _persistPositionThrottled(String id, Offset pos) {
+    _persistThrottle?.cancel();
+    _persistThrottle = Timer(const Duration(milliseconds: 120), () {
+      CorkboardStore.updatePosition(id, pos.dx, pos.dy);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final b = context.tv;
 
-    return RoomFrame(
-      title: widget.roomName,
-      child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TvTextField(
-                          controller: _ctrl,
-                          hintText: 'Drop an idea… (no due date)',
-                          onSubmitted: (_) => _add(),
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : LayoutBuilder(
+            builder: (ctx, c) {
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => FocusScope.of(ctx).unfocus(),
+                onDoubleTapDown: (d) async {
+                  // Create note where you double-tap.
+                  final local = _toBoardLocal(d.globalPosition);
+                  await _createAt(local);
+                },
+                child: Stack(
+                  key: _boardKey,
+                  children: [
+                    // Cork texture background (lighter than current).
+                    Positioned.fill(child: CustomPaint(painter: _CorkPainter(isDark: Theme.of(ctx).brightness == Brightness.dark))),
+                    // Notes
+                    ..._notes.map((n) => _noteWidget(ctx, n)).toList(growable: false),
+                    // Helper text
+                    Positioned(
+                      left: 14,
+                      right: 14,
+                      bottom: 14,
+                      child: IgnorePointer(
+                        child: Opacity(
+                          opacity: 0.75,
+                          child: Text(
+                            'Drag notes freely. Double‑tap to create. Tap a note to edit. Long‑press to delete.',
+                            style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: b.muted),
+                            textAlign: TextAlign.center,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        tooltip: 'Add',
-                        onPressed: _add,
-                        icon: const Icon(Icons.add),
-                      ),
-                      IconButton(
-                        tooltip: 'Refresh',
-                        onPressed: _load,
-                        icon: const Icon(Icons.refresh),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                      decoration: BoxDecoration(
-                        color: _corkBase(context),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onDoubleTapDown: (d) async {
-                        final local = d.localPosition;
-                        await CorkboardStore.addAt(local.dx, local.dy, '');
-                        await _load();
-                      },
-                      child: Stack(
-                        children: [
-                          // “cork-ish” background texture
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: _CorkPainter(base: _corkBase(context)),
-                            ),
-                          ),
-                          ..._notes.map((n) => _noteWidget(context, n)).toList(),
-                          if (_notes.isEmpty)
-                            Center(
-                              child: TempusCard(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.push_pin, color: cs.primary),
-                                    const SizedBox(height: 10),
-                                    const Text('No notes yet', style: TextStyle(fontWeight: FontWeight.w800)),
-                                    const SizedBox(height: 6),
-                                    Text('Add one above or “Corkboard It” from Signal Bay.', style: TextStyle(color: cs.onSurfaceVariant)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
                     ),
-                    ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
+          );
+
+    return RoomFrame(
+      title: 'Corkboard',
+      child: body,
+      headerTrailing: IconButton(
+        tooltip: 'Refresh',
+        onPressed: _load,
+        icon: const Icon(Icons.refresh),
+      ),
+      floating: FloatingActionButton.extended(
+        onPressed: () async {
+          // Create a new note near the top-left if user wants explicit.
+          await CorkboardStore.addText('', x: 40, y: 120);
+          await _load();
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('New note'),
+      ),
     );
   }
 
-  Widget _noteWidget(BuildContext context, CorkNoteModel n) {
-    final cs = Theme.of(context).colorScheme;
+  Widget _noteWidget(BuildContext ctx, CorkNoteModel n) {
+    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+    final ink = isDark ? const Color(0xFFF1F5F9) : const Color(0xFF0F172A);
+
+    final colors = [
+      const Color(0xFFFFF176), // yellow
+      const Color(0xFFA7FFEB), // mint
+      const Color(0xFFFF8A80), // coral
+      const Color(0xFFB388FF), // purple
+      const Color(0xFF80D8FF), // blue
+      const Color(0xFFFFD180), // orange
+      const Color(0xFFCCFF90), // lime
+      const Color(0xFFF8BBD0), // pink
+    ];
+    final paper = colors[n.colorIndex % colors.length].withOpacity(isDark ? 0.85 : 0.95);
+
+    final size = 122.0; // square notes
     final pos = Offset(n.x, n.y);
-    final isActive = _activeId == n.id;
 
     return Positioned(
       left: pos.dx,
       top: pos.dy,
-      child: GestureDetector(
-          onTapDown: (_) {
-            _bringToFrontLocal(n.id);
-          },
-          
+      child: Listener(
+        onPointerDown: (e) {
+          // This is the key: touching begins drag immediately.
+          _dragId = n.id;
+          _dragStart = e.position;
+          _noteStart = pos;
+          _bringToFront(n.id);
+        },
+        child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onPanStart: (d) {
-            _bringToFrontLocal(n.id);
-            setState(() => _activeId = n.id);
-            _dragStartLocal = d.localPosition;
-            _noteStart = Offset(n.x, n.y);
+            _dragId = n.id;
+            _dragStart = d.globalPosition;
+            _noteStart = pos;
+            _bringToFront(n.id);
           },
           onPanUpdate: (d) {
-            final newPos = _noteStart + (d.localPosition - _dragStartLocal);
-            // update locally for smooth drag
+            if (_dragId != n.id) return;
+            final delta = d.globalPosition - _dragStart;
+            final next = _noteStart + delta;
+
             setState(() {
               _notes = _notes
-                  .map((x) => x.id == n.id ? CorkNoteModel(
-                        id: x.id,
-                        text: x.text,
-                        x: newPos.dx,
-                        y: newPos.dy,
-                        z: x.z,
-                        colorIndex: x.colorIndex,
-                        createdAtEpochMs: x.createdAtEpochMs,
-                        updatedAtEpochMs: x.updatedAtEpochMs,
-                      ) : x)
+                  .map((x) => x.id == n.id
+                      ? CorkNoteModel(
+                          id: x.id,
+                          text: x.text,
+                          x: next.dx,
+                          y: next.dy,
+                          z: x.z,
+                          colorIndex: x.colorIndex,
+                          createdAtEpochMs: x.createdAtEpochMs,
+                          updatedAtEpochMs: x.updatedAtEpochMs,
+                        )
+                      : x)
                   .toList(growable: false);
             });
-            _schedulePersistPosition(n.id, newPos);
+
+            _persistPositionThrottled(n.id, next);
           },
-          onLongPress: () => _editNote(n),
+          onPanEnd: (_) {
+            _dragId = null;
+          },
+          onTap: () => _edit(n),
+          onLongPress: () => _delete(n),
           child: Transform.rotate(
-            angle: _rotationFor(n.id),
+            angle: (((n.id.codeUnitAt(0) + n.id.codeUnitAt(1)) % 9) - 4) * (math.pi / 180) * 0.9,
             child: Container(
-              width: 128,
-              constraints: const BoxConstraints.tightFor(height: 128),
-              padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+              width: size,
+              height: size,
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: _noteColor(context, n.colorIndex),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.black.withOpacity(.08)),
+                color: paper,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.black.withOpacity(isDark ? 0.25 : 0.18)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(isActive ? .26 : .18),
-                    blurRadius: isActive ? 18 : 12,
-                    offset: const Offset(0, 6),
+                    blurRadius: 14,
+                    offset: const Offset(0, 10),
+                    color: Colors.black.withOpacity(isDark ? 0.35 : 0.18),
                   ),
                 ],
               ),
-              child: Stack(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      n.text,
-                      maxLines: 7,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontWeight: FontWeight.w800, height: 1.15, color: Colors.black.withOpacity(.88)),
-                    ),
-                  ),
+                  // pin dot
                   Align(
                     alignment: Alignment.topCenter,
                     child: Container(
-                      width: 12,
-                      height: 12,
+                      width: 10,
+                      height: 10,
                       decoration: BoxDecoration(
-                        color: _pinColor(n.id),
-                        borderRadius: BorderRadius.circular(99),
+                        shape: BoxShape.circle,
+                        color: Colors.redAccent.withOpacity(isDark ? 0.9 : 0.85),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(.25),
-                            blurRadius: 8,
+                            blurRadius: 6,
                             offset: const Offset(0, 2),
-                          )
+                            color: Colors.black.withOpacity(isDark ? 0.45 : 0.25),
+                          ),
                         ],
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: Text(
+                      n.text.isEmpty ? '…' : n.text,
+                      maxLines: 6,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                            color: ink,
+                            fontWeight: FontWeight.w700, // inkier
+                            height: 1.2,
+                          ),
                     ),
                   ),
                 ],
@@ -348,93 +330,59 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
   }
 }
 
-
-Color _corkBase(BuildContext context) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-  // Warm cork tones; in dark mode we go deeper/less orange.
-  return isDark ? const Color(0xFF5B432E) : const Color(0xFFD2B38A);
-}
-
-Color _pinColor(String id) {
-  const pins = [
-    Color(0xFFE53935), // red
-    Color(0xFF1E88E5), // blue
-    Color(0xFF43A047), // green
-    Color(0xFFFDD835), // yellow
-    Color(0xFF8E24AA), // purple
-    Color(0xFFFB8C00), // orange
-    Color(0xFF00ACC1), // cyan
-    Color(0xFF6D4C41), // brown
-  ];
-  final h = id.codeUnits.fold<int>(0, (a, b) => (a * 31 + b) & 0x7fffffff);
-  return pins[h % pins.length];
-}
-
-
 class _CorkPainter extends CustomPainter {
-  final Color base;
-  _CorkPainter({required this.base});
+  final bool isDark;
+  _CorkPainter({required this.isDark});
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Base cork tone.
-    final bg = Paint()..color = base;
-    canvas.drawRect(Offset.zero & size, bg);
+    // Lighter cork base, even in dark mode.
+    final base = isDark ? const Color(0xFF3A2B1F) : const Color(0xFFD2B48C);
+    final base2 = isDark ? const Color(0xFF4A3627) : const Color(0xFFC9A97C);
 
-    final rnd = math.Random(7);
+    final paint = Paint()..color = base;
+    canvas.drawRect(Offset.zero & size, paint);
 
-    // Dark flecks.
-    final dark = Paint()..color = Colors.black.withOpacity(.14);
-    for (int i = 0; i < 1200; i++) {
-      final dx = rnd.nextDouble() * size.width;
-      final dy = rnd.nextDouble() * size.height;
-      final r = 0.6 + rnd.nextDouble() * 1.6;
-      canvas.drawCircle(Offset(dx, dy), r, dark);
-    }
-
-    // Light flecks.
-    final light = Paint()..color = Colors.white.withOpacity(.12);
-    for (int i = 0; i < 900; i++) {
-      final dx = rnd.nextDouble() * size.width;
-      final dy = rnd.nextDouble() * size.height;
-      final r = 0.6 + rnd.nextDouble() * 1.8;
-      canvas.drawCircle(Offset(dx, dy), r, light);
-    }
-
-    // Cork “grain” strokes.
-    final grain = Paint()
-      ..color = Colors.black.withOpacity(.05)
-      ..strokeWidth = 1.0
-      ..strokeCap = StrokeCap.round;
-    for (int i = 0; i < 160; i++) {
-      final y = rnd.nextDouble() * size.height;
-      final x0 = rnd.nextDouble() * size.width;
-      final len = 40 + rnd.nextDouble() * 120;
-      final wiggle = 6 + rnd.nextDouble() * 10;
-
-      final path = Path()..moveTo(x0, y);
-      for (int s = 1; s <= 6; s++) {
-        final t = s / 6.0;
-        final x = x0 + len * t;
-        final yy = y + math.sin((t * math.pi * 2) + rnd.nextDouble()) * (wiggle * 0.25);
-        path.lineTo(x, yy);
-      }
-      canvas.drawPath(path, grain);
-    }
-
-    // Subtle vignette to make notes “pop”.
-    final rect = Offset.zero & size;
-    final vignette = Paint()
-      ..shader = RadialGradient(
+    // Soft variation wash
+    final grad = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
         colors: [
+          base2.withOpacity(0.55),
           Colors.transparent,
-          Colors.black.withOpacity(.18),
+          base2.withOpacity(0.35),
         ],
-        stops: const [0.70, 1.0],
-      ).createShader(rect);
-    canvas.drawRect(rect, vignette);
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, grad);
+
+    // Speckles/grain
+    final r = math.Random(1337);
+    final dot = Paint()..style = PaintingStyle.fill;
+    final count = (size.width * size.height / 2600).clamp(600, 1400).toInt();
+    for (var i = 0; i < count; i++) {
+      final x = r.nextDouble() * size.width;
+      final y = r.nextDouble() * size.height;
+      final s = r.nextDouble() * 1.8 + 0.3;
+      final c = Color.lerp(
+        Colors.black.withOpacity(isDark ? 0.24 : 0.14),
+        Colors.white.withOpacity(isDark ? 0.05 : 0.18),
+        r.nextDouble(),
+      )!;
+      dot.color = c;
+      canvas.drawCircle(Offset(x, y), s, dot);
+    }
+
+    // Faint “fiber” lines
+    final line = Paint()
+      ..strokeWidth = 1
+      ..color = Colors.black.withOpacity(isDark ? 0.10 : 0.06);
+    for (var i = 0; i < 28; i++) {
+      final y = (i / 28) * size.height;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y + (r.nextDouble() * 18 - 9)), line);
+    }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _CorkPainter oldDelegate) => oldDelegate.isDark != isDark;
 }

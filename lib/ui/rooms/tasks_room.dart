@@ -23,66 +23,6 @@ class TasksRoom extends StatefulWidget {
 class _TasksRoomState extends State<TasksRoom> {
   Future<List<TaskItem>> _load() => TaskStore.load();
 
-  // Inline voice playback (list-row play/pause) — additive convenience.
-  late final AudioPlayer _inlinePlayer;
-  String? _inlineTaskId;
-
-  @override
-  void initState() {
-    super.initState();
-    _inlinePlayer = AudioPlayer();
-    // Rebuild the list row UI when playback state changes.
-    _inlinePlayer.playerStateStream.listen((_) {
-      if (mounted) setState(() {});
-    });
-    _inlinePlayer.positionStream.listen((_) {
-      if (mounted) setState(() {});
-    });
-    _inlinePlayer.durationStream.listen((_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _inlinePlayer.dispose();
-    super.dispose();
-  }
-
-  bool _isPlayingRow(TaskItem t) {
-    return _inlineTaskId == t.id && _inlinePlayer.playing;
-  }
-
-  Future<void> _toggleInlinePlay(TaskItem t) async {
-    final path = t.audioPath;
-    if (path == null || path.isEmpty) return;
-
-    try {
-      if (_inlineTaskId != t.id) {
-        _inlineTaskId = t.id;
-        await _inlinePlayer.setFilePath(path);
-        await _inlinePlayer.play();
-        setState(() {});
-        return;
-      }
-
-      if (_inlinePlayer.playing) {
-        await _inlinePlayer.pause();
-      } else {
-        await _inlinePlayer.play();
-      }
-      setState(() {});
-    } catch (_) {
-      // If playback fails (missing file, permissions, etc.), fall back silently.
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not play that voice task.')),
-        );
-      }
-    }
-  }
-
-
   Future<void> _createManualTask() async {
     final controller = TextEditingController();
     final text = await showDialog<String>(
@@ -244,7 +184,9 @@ class _TasksRoomState extends State<TasksRoom> {
               final t = tasks[i];
               final hasAudio = t.audioPath != null && t.audioPath!.isNotEmpty;
               final subtitle = hasAudio
-                  ? 'Voice capture'
+                  ? (t.transcript?.trim().isNotEmpty == true
+                      ? TaskItem.titleFromTranscript(t.transcript, maxWords: 6)
+                      : 'Voice capture (tap to label)')
                   : (t.transcript?.trim().isNotEmpty == true ? 'Text' : '');
 
               return Dismissible(
@@ -277,41 +219,11 @@ class _TasksRoomState extends State<TasksRoom> {
                 child: ListTile(
                   leading: Icon(hasAudio ? Icons.mic_rounded : Icons.task_alt_rounded),
                   title: Text(t.title),
-                  subtitle: (subtitle.isEmpty && !(_inlineTaskId == t.id)) 
-                      ? null 
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (subtitle.isNotEmpty) Text(subtitle),
-                            if (_inlineTaskId == t.id)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: LinearProgressIndicator(
-                                  value: (() {
-                                    final d = _inlinePlayer.duration;
-                                    final p = _inlinePlayer.position;
-                                    if (d == null || d.inMilliseconds == 0) return null;
-                                    return p.inMilliseconds / d.inMilliseconds;
-                                  })(),
-                                ),
-                              ),
-                          ],
-                        ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (hasAudio)
-                        IconButton(
-                          tooltip: _isPlayingRow(t) ? 'Pause' : 'Play',
-                          icon: Icon(_isPlayingRow(t) ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                          onPressed: () => _toggleInlinePlay(t),
-                        ),
-                      IconButton(
-                        tooltip: 'Rename',
-                        icon: const Icon(Icons.edit_rounded),
-                        onPressed: () => _renameTask(t),
-                      ),
-                    ],
+                  subtitle: subtitle.isEmpty ? null : Text(subtitle),
+                  trailing: IconButton(
+                    tooltip: 'Rename',
+                    icon: const Icon(Icons.edit_rounded),
+                    onPressed: () => _renameTask(t),
                   ),
                   onTap: () => showModalBottomSheet(
                     context: context,

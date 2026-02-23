@@ -1,9 +1,7 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/app_state_scope.dart';
 import '../../core/metrics_store.dart';
-import '../../core/learning_store.dart';
 import '../../core/notification_ingestor.dart';
 import '../../core/recycle_bin_store.dart';
 import '../../core/signal_item.dart';
@@ -11,7 +9,6 @@ import '../../core/signal_mute_store.dart';
 import '../../core/signal_store.dart';
 import '../../core/task_item.dart';
 import '../../core/task_store.dart';
-import '../../core/corkboard_store.dart';
 import '../room_frame.dart';
 import '../theme/tempus_ui.dart';
 import '../widgets/signal_detail_sheet.dart';
@@ -28,8 +25,6 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
   List<SignalItem> _signals = const [];
   bool _loading = true;
 
-  Timer? _refreshTimer;
-
   Set<String> _mutedPkgs = const <String>{};
 
   @override
@@ -37,12 +32,10 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 8), (_) => _pullNativeSignals());
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -63,6 +56,13 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
       _mutedPkgs = muted;
       _loading = false;
     });
+    await _pullNativeSignals();
+  }
+
+  Future<void> _refresh() async {
+    // Refresh muted packages + ingest fresh notifications.
+    final muted = await SignalMuteStore.loadMutedPackages();
+    if (mounted) setState(() => _mutedPkgs = muted);
     await _pullNativeSignals();
   }
 
@@ -97,7 +97,7 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     }).toList();
 
     // Merge: dedupe by fingerprint (prefer newest lastSeen), increment count.
-    final byFp = <String, SignalItem>{ for (final s in _signals) s.fingerprint : s };
+    final byFp = <String, SignalItem>{for (final s in _signals) s.fingerprint: s};
     for (final s in incoming) {
       final existing = byFp[s.fingerprint];
       if (existing == null) {
@@ -112,8 +112,7 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     }
 
     // Keep most recent first by lastSeenAt.
-    final merged = byFp.values.toList()
-      ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
+    final merged = byFp.values.toList()..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
 
     // Cap log to keep the app snappy.
     final capped = merged.take(500).toList(growable: false);
@@ -137,6 +136,17 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
 
     if (!mounted) return;
     AppStateScope.of(context).setSelectedModule('tasks');
+  }
+
+  Future<void> _toCorkboardStub(SignalItem s) async {
+    // Your current zip has corkboard as a PlaceholderRoom.
+    // We still provide the UX action now: mark it acknowledged and jump to Corkboard module.
+    await _acknowledge(s, true);
+    if (!mounted) return;
+    AppStateScope.of(context).setSelectedModule('corkboard');
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Corkboard capture queued (Corkboard module is placeholder in this build).')),
+    );
   }
 
   Future<void> _toRecycle(SignalItem s) async {
@@ -190,8 +200,8 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
                     ? const Center(child: CircularProgressIndicator())
                     : TabBarView(
                         children: [
-                          _buildList(inbox, empty: _emptyInbox(context)),
-                          _buildList(log, empty: _emptyLog(context)),
+                          _buildRefreshableList(inbox, empty: _emptyInbox(context)),
+                          _buildRefreshableList(log, empty: _emptyLog(context)),
                         ],
                       ),
               ),
@@ -202,15 +212,20 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     );
   }
 
-  Widget _buildList(List<SignalItem> items, {required Widget empty}) {
-    if (items.isEmpty) return empty;
-
+  Widget _buildRefreshableList(List<SignalItem> items, {required Widget empty}) {
     return RefreshIndicator(
-      onRefresh: () async {
-        await _pullNativeSignals();
-        await _load();
-      },
-      child: ListView.separated(
+      onRefresh: _refresh,
+      child: items.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [const SizedBox(height: 140), Center(child: empty)],
+            )
+          : _buildList(items),
+    );
+  }
+
+  Widget _buildList(List<SignalItem> items) {
+    return ListView.separated(
       physics: const AlwaysScrollableScrollPhysics(),
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
@@ -264,11 +279,11 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
 
         return Dismissible(
           key: ValueKey('sig_${s.fingerprint}'),
-          background: _swipeBg(ctx, Icons.playlist_add, 'Task'),
+          background: _swipeBg(ctx, Icons.keyboard_arrow_right, 'Action'),
           secondaryBackground: _swipeBg(ctx, Icons.delete_outline, 'Recycle', right: true),
           confirmDismiss: (dir) async {
             if (dir == DismissDirection.startToEnd) {
-              await _showActions(s);
+              await _showActions(ctx, s);
               return false;
             } else {
               await _toRecycle(s);
@@ -282,6 +297,45 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
           ),
         );
       },
+    );
+  }
+
+  Future<void> _showActions(BuildContext ctx, SignalItem s) async {
+    await showModalBottomSheet<void>(
+      context: ctx,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TempusCard(
+                child: ListTile(
+                  leading: const Icon(Icons.playlist_add),
+                  title: const Text('Create Task'),
+                  subtitle: const Text('Promote this signal into Tasks.'),
+                  onTap: () async {
+                    Navigator.of(ctx).pop();
+                    await _toTask(s);
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+              TempusCard(
+                child: ListTile(
+                  leading: const Icon(Icons.note_alt_outlined),
+                  title: const Text('Corkboard It'),
+                  subtitle: const Text('Pin for later review (placeholder in this build).'),
+                  onTap: () async {
+                    Navigator.of(ctx).pop();
+                    await _toCorkboardStub(s);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -308,50 +362,6 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     );
   }
 
-  Future<void> _showActions(SignalItem s) async {
-    if (!mounted) return;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) {
-        final cs = Theme.of(ctx).colorScheme;
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: Icon(Icons.task_alt, color: cs.primary),
-                title: const Text('Create Task'),
-                subtitle: const Text('Promote this signal into Tasks.'),
-                onTap: () async {
-                  Navigator.of(ctx).pop();
-                  await _toTask(s);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.push_pin, color: cs.secondary),
-                title: const Text('Corkboard It'),
-                subtitle: const Text('Pin it as a note (no due date).'),
-                onTap: () async {
-                  Navigator.of(ctx).pop();
-                  final text = ('${s.title}\n${s.body}'.trim());
-                  await CorkboardStore.addText(text);
-                  await MetricsStore.inc('corkboardCreated');
-                  await LearningStore.recordSignalAction(s, 'pin_cork');
-await _acknowledge(s, true);
-                  if (!mounted) return;
-                  AppStateScope.of(context).setSelectedModule('corkboard');
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _openDetails(SignalItem s) async {
     final muted = _mutedPkgs.contains(s.source);
     await showModalBottomSheet(
@@ -375,34 +385,30 @@ await _acknowledge(s, true);
 
   Widget _emptyInbox(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Center(
-      child: TempusCard(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.radar, size: 30, color: cs.primary),
-            const SizedBox(height: 10),
-            Text('All clear', style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
-            const SizedBox(height: 6),
-            Text('Signals are still being logged in the background.', style: TextStyle(color: cs.onSurfaceVariant)),
-          ],
-        ),
+    return TempusCard(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.radar, size: 30, color: cs.primary),
+          const SizedBox(height: 10),
+          Text('All clear', style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
+          const SizedBox(height: 6),
+          Text('Pull down to refresh.', style: TextStyle(color: cs.onSurfaceVariant)),
+        ],
       ),
     );
   }
 
   Widget _emptyLog(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Center(
-      child: TempusCard(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.history, size: 30, color: cs.primary),
-            const SizedBox(height: 10),
-            Text('No history yet', style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
-          ],
-        ),
+    return TempusCard(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.history, size: 30, color: cs.primary),
+          const SizedBox(height: 10),
+          Text('No history yet', style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
+        ],
       ),
     );
   }

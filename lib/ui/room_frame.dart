@@ -29,12 +29,16 @@ class RoomFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: TempusBackground(
-          child: Column(
-            children: [
-              TempusAppHeader(roomTitle: title, trailing: headerTrailing),
-              Expanded(child: child),
-            ],
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: TempusBackground(
+            child: Column(
+              children: [
+                TempusAppHeader(roomTitle: title, trailing: headerTrailing),
+                Expanded(child: child),
+              ],
+            ),
           ),
         ),
       ),

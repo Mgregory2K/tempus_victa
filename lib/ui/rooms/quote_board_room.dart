@@ -9,26 +9,35 @@ class QuoteBoardRoom extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+
     return RoomFrame(
-      title: roomName,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: TempusCard(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
+      title: 'Quote Board',
+      child: ListView(
+        padding: const EdgeInsets.all(14),
+        children: [
+          TempusCard(
+            elevated: true,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text('Quote Board', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                SizedBox(height: 8),
+              children: [
+                Text('Book of Quotes', style: t.titleLarge),
+                const SizedBox(height: 6),
                 Text(
-                  'This module is reserved for saved quotes and reflections. '
-                  'Analyze lives in the Analyze room (not here).',
+                  'This board will hold your quotes and “rules of engagement.”',
+                  style: t.bodySmall,
                 ),
               ],
             ),
           ),
-        ),
+          const SizedBox(height: 14),
+          TempusCard(
+            child: Text(
+              'No quotes yet. (This is intentionally NOT the Analyze screen.)',
+              style: t.bodyMedium,
+            ),
+          ),
+        ],
       ),
     );
   }
