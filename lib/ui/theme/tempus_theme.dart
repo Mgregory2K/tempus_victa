@@ -71,18 +71,18 @@ class TempusTheme {
     final base = ThemeData.light(useMaterial3: true);
 
     final cs = base.colorScheme.copyWith(
-      primary: neonGreen,
+      primary: const Color(0xFF1F7A4D),
       secondary: neonGreen,
-      background: const Color(0xFFF3F5F8),
-      surface: const Color(0xFFF8FAFC),
-      outlineVariant: const Color(0xFFE2E8F0),
+      background: const Color(0xFFF6F5F2),
+      surface: const Color(0xFFFBF9F5),
+      outlineVariant: const Color(0xFFE7E2D9),
     );
 
     final brand = TempusBrand(
-      surface0: const Color(0xFFF3F5F8),
+      surface0: const Color(0xFFF6F5F2),
       surface1: const Color(0xFFFFFFFF),
-      surface2: const Color(0xFFF8FAFC),
-      border: const Color(0xFFE2E8F0),
+      surface2: const Color(0xFFFBF9F5),
+      border: const Color(0xFFE7E2D9),
       muted: const Color(0xFF64748B), // slate-500
       accent: neonGreen,
     );
