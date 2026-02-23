@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../core/app_state_scope.dart';
 import '../../core/metrics_store.dart';
 import '../../core/task_item.dart';
 import '../../core/task_store.dart';
 import '../room_frame.dart';
+import '../theme/tempus_ui.dart';
 
 class BridgeRoom extends StatefulWidget {
   final String roomName;
@@ -21,116 +21,87 @@ class BridgeRoom extends StatefulWidget {
 }
 
 class _BridgeRoomState extends State<BridgeRoom> {
-  final _recorder = AudioRecorder();
+  final AudioRecorder _recorder = AudioRecorder();
   final SpeechToText _stt = SpeechToText();
 
   bool _isRecording = false;
   String? _activePath;
-
-  // Live transcript captured while recording (offline-capable if device has offline language packs).
   String _liveTranscript = '';
-  bool _sttInitialized = false;
+
+  Map<String, int> _metrics = const {};
 
   @override
-  void dispose() {
-    _stt.cancel();
-    _recorder.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadMetrics();
+    _initStt();
   }
 
-  Future<String> _nextAudioPath(String taskId) async {
-    final dir = await getApplicationDocumentsDirectory();
-    final audioDir = Directory('${dir.path}/tempus/audio');
-    if (!await audioDir.exists()) {
-      await audioDir.create(recursive: true);
-    }
-    return '${audioDir.path}/$taskId.m4a';
+  Future<void> _loadMetrics() async {
+    final m = await MetricsStore.load();
+    if (!mounted) return;
+    setState(() => _metrics = m);
   }
 
-  Future<void> _ensureSttReady() async {
-    if (_sttInitialized) return;
-
-    // If initialization fails (no service / restricted device), we still record audio.
+  Future<void> _initStt() async {
     try {
-      _sttInitialized = await _stt.initialize(
-        onError: (e) {
-          // Intentionally silent for baseline. Audio capture must still work.
-        },
-        onStatus: (s) {
-          // no-op
-        },
-      );
+      await _stt.initialize();
     } catch (_) {
-      _sttInitialized = false;
+      // STT is best-effort; recording still works.
     }
   }
 
   Future<void> _startRecording() async {
     if (_isRecording) return;
 
-    final ok = await _recorder.hasPermission();
-    if (!ok) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Microphone permission is required.')),
+    final dir = await getApplicationDocumentsDirectory();
+    final folder = Directory('${dir.path}${Platform.pathSeparator}voice');
+    if (!folder.existsSync()) folder.createSync(recursive: true);
+
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final path = '${folder.path}${Platform.pathSeparator}$id.m4a';
+
+    try {
+      _liveTranscript = '';
+      setState(() {
+        _isRecording = true;
+        _activePath = path;
+      });
+
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+        ),
+        path: path,
       );
-      return;
-    }
 
-    final taskId = const Uuid().v4();
-    final path = await _nextAudioPath(taskId);
-
-    // Reset transcript for this capture.
-    _liveTranscript = '';
-
-    // Start audio recording first (core capture must work even if STT fails).
-    await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.aacLc,
-        bitRate: 128000,
-        sampleRate: 44100,
-      ),
-      path: path,
-    );
-
-    // Start live transcription in parallel (best-effort).
-    await _ensureSttReady();
-    if (_sttInitialized) {
-      try {
+      // Best-effort live transcription.
+      if (await _stt.hasPermission) {
         await _stt.listen(
-          onResult: (result) {
-            // Keep the latest recognized words. We'll save the final value when recording ends.
-            _liveTranscript = result.recognizedWords;
-          },
+          onResult: (r) => setState(() => _liveTranscript = r.recognizedWords),
           listenMode: ListenMode.dictation,
-          partialResults: true,
         );
-      } catch (_) {
-        // Ignore STT issues; audio capture still succeeds.
       }
+    } catch (_) {
+      setState(() {
+        _isRecording = false;
+        _activePath = null;
+      });
     }
-
-    setState(() {
-      _isRecording = true;
-      _activePath = path;
-    });
   }
 
   Future<void> _stopAndCreateTask() async {
     if (!_isRecording) return;
 
-    // Stop transcription first (best-effort) so we finalize recognized words.
     try {
-      if (_stt.isListening) {
-        await _stt.stop();
-      }
-    } catch (_) {
-      // ignore
-    }
+      if (_stt.isListening) await _stt.stop();
+    } catch (_) {}
 
     final stoppedPath = await _recorder.stop();
-
     final path = stoppedPath ?? _activePath;
+
     setState(() {
       _isRecording = false;
       _activePath = null;
@@ -138,13 +109,10 @@ class _BridgeRoomState extends State<BridgeRoom> {
 
     if (path == null || path.trim().isEmpty) return;
 
-    // The task ID is derived from filename.
     final id = path.split(Platform.pathSeparator).last.split('.').first;
 
     final transcript = _liveTranscript.trim().isEmpty ? null : _liveTranscript.trim();
-    final title = transcript == null
-        ? 'Voice task'
-        : TaskItem.titleFromTranscript(transcript, maxWords: 6);
+    final title = transcript == null ? 'Voice task' : TaskItem.titleFromTranscript(transcript, maxWords: 6);
 
     final task = TaskItem(
       id: id,
@@ -155,96 +123,139 @@ class _BridgeRoomState extends State<BridgeRoom> {
     );
 
     await TaskStore.upsert(task);
-
-    // Metrics: voice task created.
-    await MetricsStore.inc(TvMetrics.tasksCreatedVoice);
+    await MetricsStore.bump(MetricKeys.tasksCreatedVoice);
+    await _loadMetrics();
 
     if (!mounted) return;
     AppStateScope.of(context).bumpTasksVersion();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(transcript == null ? 'Task created (no transcript yet)' : 'Task created')),
-    );
+    // Magic: no explanation. Just confirmation.
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Captured')));
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    final signals = _metrics[MetricKeys.signalsIngested] ?? 0;
+    final tasks = (_metrics[MetricKeys.tasksCreatedManual] ?? 0) + (_metrics[MetricKeys.tasksCreatedVoice] ?? 0);
+    final web = _metrics[MetricKeys.webSearches] ?? 0;
+    final ai = _metrics[MetricKeys.aiReplies] ?? 0;
+
     return RoomFrame(
       title: widget.roomName,
-      child: Center(
-        child: _isRecording
-            ? Text('Recording…', style: Theme.of(context).textTheme.headlineMedium)
-            : FutureBuilder<Map<String, int>>(
-                future: MetricsStore.todaySnapshot(const [
-                  TvMetrics.signalsIngested,
-                  TvMetrics.tasksCreatedManual,
-                  TvMetrics.tasksCreatedVoice,
-                  TvMetrics.webSearches,
-                  TvMetrics.aiCalls,
-                ]),
-                builder: (context, snap) {
-                  final theme = Theme.of(context);
-                  final m = snap.data ?? const {};
-                  return Container(
-                    constraints: const BoxConstraints(maxWidth: 520),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: theme.dividerColor.withOpacity(0.18)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: ListView(
+          children: [
+            Text(
+              'Welcome back.',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: cs.onSurface),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                SizedBox(
+                  width: (MediaQuery.of(context).size.width - 14 * 2 - 10) / 2,
+                  child: TempusMetricTile(label: 'Signals logged', value: '$signals', icon: Icons.radar),
+                ),
+                SizedBox(
+                  width: (MediaQuery.of(context).size.width - 14 * 2 - 10) / 2,
+                  child: TempusMetricTile(label: 'Tasks captured', value: '$tasks', icon: Icons.check_circle_outline),
+                ),
+                SizedBox(
+                  width: (MediaQuery.of(context).size.width - 14 * 2 - 10) / 2,
+                  child: TempusMetricTile(label: 'Web lookups', value: '$web', icon: Icons.public),
+                ),
+                SizedBox(
+                  width: (MediaQuery.of(context).size.width - 14 * 2 - 10) / 2,
+                  child: TempusMetricTile(label: 'AI assists', value: '$ai', icon: Icons.auto_awesome),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            TempusCard(
+              child: Row(
+                children: [
+                  Icon(_isRecording ? Icons.mic : Icons.mic_none_rounded, color: cs.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _isRecording ? 'Listening…' : 'Hold mic to capture a voice task',
+                      style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600),
                     ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Today', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 10),
-                        _metricRow(theme, 'Signals', m[TvMetrics.signalsIngested] ?? 0),
-                        _metricRow(theme, 'Tasks (manual)', m[TvMetrics.tasksCreatedManual] ?? 0),
-                        _metricRow(theme, 'Tasks (voice)', m[TvMetrics.tasksCreatedVoice] ?? 0),
-                        _metricRow(theme, 'Web searches', m[TvMetrics.webSearches] ?? 0),
-                        _metricRow(theme, 'AI replies', m[TvMetrics.aiCalls] ?? 0),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Hold the mic to capture a voice task.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                  ),
+                  TempusPill(text: _isRecording ? 'Recording' : 'Ready'),
+                ],
               ),
+            ),
+            const SizedBox(height: 14),
+            TempusCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Today', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: cs.onSurface)),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Signals flow into Signal Bay. If something needs action, promote it to a Task. If it’s just knowledge, acknowledge it and keep it logged.',
+                    style: TextStyle(color: cs.onSurfaceVariant, height: 1.25),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
       floating: GestureDetector(
         onLongPressStart: (_) => _startRecording(),
         onLongPressEnd: (_) => _stopAndCreateTask(),
-        child: FloatingActionButton.small(
+        child: FloatingActionButton(
           heroTag: 'bridge_mic',
           onPressed: () {},
-          child: Icon(_isRecording ? Icons.mic : Icons.mic_none_rounded),
+          backgroundColor: cs.primary,
+          foregroundColor: cs.onPrimary,
+          child: Icon(_isRecording ? Icons.stop_rounded : Icons.mic_none_rounded),
         ),
       ),
     );
   }
+}
 
-  Widget _metricRow(ThemeData theme, String label, int value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+
+class _WelcomeBlock extends StatelessWidget {
+  final bool isRecording;
+  const _WelcomeBlock({required this.isRecording});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return TempusCard(
       child: Row(
         children: [
-          Expanded(
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.8),
-              ),
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: cs.primaryContainer,
+              borderRadius: BorderRadius.circular(14),
             ),
+            child: Icon(isRecording ? Icons.mic : Icons.mic_none, color: cs.onPrimaryContainer),
           ),
-          Text(
-            value.toString(),
-            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Welcome back.', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: cs.onSurface)),
+                const SizedBox(height: 2),
+                Text(
+                  isRecording ? 'Listening… (release to save)' : 'Press and hold the mic to capture a voice task.',
+                  style: TextStyle(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
           ),
         ],
       ),

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'theme/tempus_ui.dart';
+import 'theme/tempus_widgets.dart';
+
 class RoomFrame extends StatelessWidget {
   final String title;
   final Widget child;
@@ -10,22 +13,31 @@ class RoomFrame extends StatelessWidget {
   /// Optional FAB slot used by Tasks/Projects.
   final Widget? fab;
 
+  /// Optional trailing widget in header (e.g., settings icon).
+  final Widget? headerTrailing;
+
   const RoomFrame({
     super.key,
     required this.title,
     required this.child,
     this.floating,
     this.fab,
+    this.headerTrailing,
   });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        centerTitle: false,
+      body: SafeArea(
+        child: TempusBackground(
+          child: Column(
+            children: [
+              TempusAppHeader(roomTitle: title, trailing: headerTrailing),
+              Expanded(child: child),
+            ],
+          ),
+        ),
       ),
-      body: SafeArea(child: child),
       floatingActionButton: floating ?? fab,
     );
   }

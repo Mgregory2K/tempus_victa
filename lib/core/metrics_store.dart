@@ -1,63 +1,74 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Lightweight, local-first metrics for the user.
-///
-/// Goals:
-/// - Always-on (no AI required)
-/// - Private (stored only on device)
-/// - Cheap (SharedPreferences)
-///
-/// This is intentionally simple for Phase 1.
-class MetricsStore {
-  static const _kPrefixToday = 'tv.metrics.today.'; // date-scoped
-  static const _kPrefixTotal = 'tv.metrics.total.'; // lifetime
-
-  static String _todayKey() {
-    final now = DateTime.now();
-    final y = now.year.toString().padLeft(4, '0');
-    final m = now.month.toString().padLeft(2, '0');
-    final d = now.day.toString().padLeft(2, '0');
-    return '$y-$m-$d';
-  }
-
-  static Future<void> inc(String metric, [int by = 1]) async {
-    final prefs = await SharedPreferences.getInstance();
-    final today = _todayKey();
-    final kToday = '$_kPrefixToday$today.$metric';
-    final kTotal = '$_kPrefixTotal$metric';
-    prefs.setInt(kToday, (prefs.getInt(kToday) ?? 0) + by);
-    prefs.setInt(kTotal, (prefs.getInt(kTotal) ?? 0) + by);
-  }
-
-  static Future<int> getToday(String metric) async {
-    final prefs = await SharedPreferences.getInstance();
-    final k = '$_kPrefixToday${_todayKey()}.$metric';
-    return prefs.getInt(k) ?? 0;
-  }
-
-  static Future<int> getTotal(String metric) async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt('$_kPrefixTotal$metric') ?? 0;
-  }
-
-  static Future<Map<String, int>> todaySnapshot(List<String> metrics) async {
-    final prefs = await SharedPreferences.getInstance();
-    final base = '$_kPrefixToday${_todayKey()}.';
-    return {
-      for (final m in metrics) m: prefs.getInt('$base$m') ?? 0,
-    };
-  }
+/// Metric keys used across Tempus, Victa.
+/// Keep these as const Strings so they can be used in const lists and maps.
+class TvMetrics {
+  static const String signalsIngested = 'signalsIngested';
+  static const String signalsAcknowledged = 'signalsAcknowledged';
+  static const String tasksCreatedManual = 'tasksCreatedManual';
+  static const String tasksCreatedVoice = 'tasksCreatedVoice';
+  static const String webSearches = 'webSearches';
+  static const String aiCalls = 'aiCalls';
+  static const String projectsOpened = 'projectsOpened';
 }
 
-/// Canonical metric names used across the app.
-class TvMetrics {
-  static const signalsIngested = 'signals_ingested';
-  static const signalsPromotedToTask = 'signals_to_task';
-  static const signalsRecycled = 'signals_recycled';
+/// Back-compat alias used by some rooms.
+class MetricKeys {
+  static const String signalsIngested = TvMetrics.signalsIngested;
+  static const String signalsAcknowledged = TvMetrics.signalsAcknowledged;
+  static const String tasksCreatedManual = TvMetrics.tasksCreatedManual;
+  static const String tasksCreatedVoice = TvMetrics.tasksCreatedVoice;
+  static const String webSearches = TvMetrics.webSearches;
+  static const String aiReplies = TvMetrics.aiCalls;
+  static const String aiCalls = TvMetrics.aiCalls;
+  static const String projectsOpened = TvMetrics.projectsOpened;
+}
 
-  static const tasksCreatedManual = 'tasks_created_manual';
-  static const tasksCreatedVoice = 'tasks_created_voice';
+class MetricsSnapshot {
+  final DateTime day; // local day
+  final Map<String, int> metrics;
+  const MetricsSnapshot({required this.day, required this.metrics});
+}
 
-  static const webSearches = 'web_searches';
-  static const aiCalls = 'ai_calls';
+class MetricsStore {
+  static String _dayKey(DateTime d) => '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
+
+  static Future<void> bump(String key, [int by = 1]) async {
+    final prefs = await SharedPreferences.getInstance();
+    final day = _dayKey(DateTime.now());
+    final k = 'tv.metrics.$day.$key';
+    final current = prefs.getInt(k) ?? 0;
+    await prefs.setInt(k, current + by);
+  }
+
+  /// Back-compat alias used by older code.
+  static Future<void> inc(String key, [int by = 1]) => bump(key, by);
+
+  /// Loads a map of requested metrics for today.
+  static Future<Map<String, int>> load([List<String>? keys]) async {
+    final prefs = await SharedPreferences.getInstance();
+    final day = _dayKey(DateTime.now());
+    final want = keys ??
+        const [
+          TvMetrics.signalsIngested,
+          TvMetrics.signalsAcknowledged,
+          TvMetrics.tasksCreatedManual,
+          TvMetrics.tasksCreatedVoice,
+          TvMetrics.webSearches,
+          TvMetrics.aiCalls,
+          TvMetrics.projectsOpened,
+        ];
+
+    final out = <String, int>{};
+    for (final k in want) {
+      out[k] = prefs.getInt('tv.metrics.$day.$k') ?? 0;
+    }
+    return out;
+  }
+
+  /// More structured snapshot (used by Daily Brief).
+  static Future<MetricsSnapshot> todaySnapshot(List<String> keys) async {
+    final m = await load(keys);
+    return MetricsSnapshot(day: DateTime.now(), metrics: m);
+  }
 }
