@@ -48,6 +48,13 @@ class _TempusAppState extends State<TempusApp> {
     // Avoid a flash of the wrong theme at startup.
     if (!_loaded) {
       return MaterialApp(
+      builder: (context, child) {
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          child: child,
+        );
+      },
         title: 'Tempus, Victa',
         debugShowCheckedModeBanner: false,
         theme: TempusTheme.light(),
@@ -58,6 +65,13 @@ class _TempusAppState extends State<TempusApp> {
     }
 
     return MaterialApp(
+      builder: (context, child) {
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          child: child,
+        );
+      },
       title: 'Tempus, Victa',
       debugShowCheckedModeBanner: false,
       theme: TempusTheme.light(),

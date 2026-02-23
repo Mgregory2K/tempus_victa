@@ -390,7 +390,8 @@ class _ReadyRoomState extends State<ReadyRoom> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return SafeArea(
+      child: Column(
       children: [
         SizedBox(
           height: 52,
@@ -465,6 +466,7 @@ class _ReadyRoomState extends State<ReadyRoom> {
           ),
         ),
       ],
+    ),
     );
   }
 }
@@ -556,7 +558,7 @@ class _ProtocolInvokeSheet extends StatefulWidget {
 
 class _ProtocolInvokeSheetState extends State<_ProtocolInvokeSheet> {
   final _issueCtrl = TextEditingController();
-  final _figuresCtrl = TextEditingController(text: 'Socratic, Spock, Kirk');
+  final _figuresCtrl = TextEditingController();
   String _intent = 'Decision support';
   bool _surprise = false;
   bool _noFollowUps = false;
@@ -609,7 +611,7 @@ class _ProtocolInvokeSheetState extends State<_ProtocolInvokeSheet> {
             const SizedBox(height: 10),
             TvTextField(
               controller: _figuresCtrl,
-              hintText: 'Figures (comma-separated)',
+              hintText: 'Figures (comma-separated) e.g., Socratic, Spock, Kirk',
               maxLines: 2,
             ),
             const SizedBox(height: 10),

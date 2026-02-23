@@ -12,6 +12,8 @@ import '../ui/rooms/recycle_bin_room.dart';
 import '../ui/rooms/ready_room.dart';
 import '../ui/rooms/settings_room.dart';
 import '../ui/rooms/corkboard_room.dart';
+import '../ui/rooms/analyze_room.dart';
+import '../ui/rooms/quote_board_room.dart';
 
 class ModuleRegistry {
   /// Default module list (used to seed first-run and as a reset fallback).
@@ -75,7 +77,7 @@ class ModuleRegistry {
           name: 'Quote Board',
           icon: Icons.format_quote_rounded,
           usesCarousel: true,
-          builder: ({required roomName}) => PlaceholderRoom(roomName: roomName),
+          builder: ({required roomName}) => QuoteBoardRoom(roomName: roomName),
         ),
         ModuleDef(
           id: 'recycle_bin',
@@ -99,11 +101,11 @@ class ModuleRegistry {
           builder: ({required roomName}) => PlaceholderRoom(roomName: roomName),
         ),
         ModuleDef(
-          id: 'tbd',
-          name: 'TBD',
-          icon: Icons.extension_rounded,
+          id: 'analyze',
+          name: 'Analyze',
+          icon: Icons.psychology_rounded,
           usesCarousel: true,
-          builder: ({required roomName}) => PlaceholderRoom(roomName: roomName),
+          builder: ({required roomName}) => AnalyzeRoom(roomName: roomName),
         ),
       ];
 }

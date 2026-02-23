@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_state_scope.dart';
 import '../../core/metrics_store.dart';
+import '../../core/learning_store.dart';
 import '../../core/notification_ingestor.dart';
 import '../../core/recycle_bin_store.dart';
 import '../../core/signal_item.dart';
@@ -337,7 +338,8 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
                   final text = ('${s.title}\n${s.body}'.trim());
                   await CorkboardStore.addText(text);
                   await MetricsStore.inc('corkboardCreated');
-                  await _acknowledge(s, true);
+                  await LearningStore.recordSignalAction(s, 'pin_cork');
+await _acknowledge(s, true);
                   if (!mounted) return;
                   AppStateScope.of(context).setSelectedModule('corkboard');
                 },

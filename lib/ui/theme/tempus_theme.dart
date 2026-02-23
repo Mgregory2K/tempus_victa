@@ -160,13 +160,13 @@ class TempusTheme {
       surface1: const Color(0xFF0F1620),
       surface2: const Color(0xFF111A25),
       border: const Color(0xFF243244),
-      muted: const Color(0xFF9CA3AF), // gray-400
+      muted: const Color(0xFFB6BEC9), // gray-400
       accent: neonGreen,
     );
 
     final text = base.textTheme.apply(
-      bodyColor: const Color(0xFFE5E7EB),
-      displayColor: const Color(0xFFE5E7EB),
+      bodyColor: const Color(0xFFF1F5F9),
+      displayColor: const Color(0xFFF1F5F9),
     ).copyWith(
       headlineSmall: base.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, height: 1.1),
       titleLarge: base.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, height: 1.1),

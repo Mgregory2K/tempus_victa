@@ -50,6 +50,24 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
     });
   }
 
+
+  void _bringToFrontLocal(String id) {
+    // No async reload; keep dragging instant.
+    final maxZ = _notes.isEmpty ? 0 : _notes.map((e) => e.z).reduce((a, b) => a > b ? a : b);
+    setState(() {
+      _notes = _notes
+          .map((n) => n.id == id
+              ? n.copyWith(z: maxZ + 1, updatedAtEpochMs: DateTime.now().millisecondsSinceEpoch)
+              : n)
+          .toList(growable: false);
+      _activeId = id;
+    });
+    // Persist z-order in background.
+    // ignore: unawaited_futures
+    CorkboardStore.bringToFront(id);
+  }
+
+
   Future<void> _add() async {
     final t = _ctrl.text.trim();
     if (t.isEmpty) return;
@@ -191,6 +209,13 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
                         color: _corkBase(context),
                         borderRadius: BorderRadius.circular(20),
                       ),
+                      child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onDoubleTapDown: (d) async {
+                        final local = d.localPosition;
+                        await CorkboardStore.addAt(local.dx, local.dy, '');
+                        await _load();
+                      },
                       child: Stack(
                         children: [
                           // “cork-ish” background texture
@@ -218,6 +243,7 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
                         ],
                       ),
                     ),
+                    ),
                   ),
                 ),
               ],
@@ -233,16 +259,14 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
     return Positioned(
       left: pos.dx,
       top: pos.dy,
-      child: Listener(
-        onPointerDown: (_) async {
-          // touching a note makes it top-most (primary)
-          setState(() => _activeId = n.id);
-          await CorkboardStore.bringToFront(n.id);
-          await _load(); // refresh z-order
-        },
-        child: GestureDetector(
+      child: GestureDetector(
+          onTapDown: (_) {
+            _bringToFrontLocal(n.id);
+          },
+          
           behavior: HitTestBehavior.opaque,
           onPanStart: (d) {
+            _bringToFrontLocal(n.id);
             setState(() => _activeId = n.id);
             _dragStartLocal = d.localPosition;
             _noteStart = Offset(n.x, n.y);
@@ -270,8 +294,8 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
           child: Transform.rotate(
             angle: _rotationFor(n.id),
             child: Container(
-              width: 172,
-              constraints: const BoxConstraints(minHeight: 120),
+              width: 128,
+              constraints: const BoxConstraints.tightFor(height: 128),
               padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
               decoration: BoxDecoration(
                 color: _noteColor(context, n.colorIndex),
@@ -293,7 +317,7 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
                       n.text,
                       maxLines: 7,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w700, height: 1.15),
+                      style: TextStyle(fontWeight: FontWeight.w800, height: 1.15, color: Colors.black.withOpacity(.88)),
                     ),
                   ),
                   Align(
@@ -328,7 +352,7 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
 Color _corkBase(BuildContext context) {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   // Warm cork tones; in dark mode we go deeper/less orange.
-  return isDark ? const Color(0xFF3A2A1D) : const Color(0xFFC8A57A);
+  return isDark ? const Color(0xFF5B432E) : const Color(0xFFD2B38A);
 }
 
 Color _pinColor(String id) {
@@ -360,7 +384,7 @@ class _CorkPainter extends CustomPainter {
     final rnd = math.Random(7);
 
     // Dark flecks.
-    final dark = Paint()..color = Colors.black.withOpacity(.10);
+    final dark = Paint()..color = Colors.black.withOpacity(.14);
     for (int i = 0; i < 1200; i++) {
       final dx = rnd.nextDouble() * size.width;
       final dy = rnd.nextDouble() * size.height;
@@ -369,7 +393,7 @@ class _CorkPainter extends CustomPainter {
     }
 
     // Light flecks.
-    final light = Paint()..color = Colors.white.withOpacity(.08);
+    final light = Paint()..color = Colors.white.withOpacity(.12);
     for (int i = 0; i < 900; i++) {
       final dx = rnd.nextDouble() * size.width;
       final dy = rnd.nextDouble() * size.height;
