@@ -10,6 +10,7 @@ class TvMetrics {
   static const String webSearches = 'webSearches';
   static const String aiCalls = 'aiCalls';
   static const String projectsOpened = 'projectsOpened';
+  static const String corkboardCreated = 'corkboardCreated';
 }
 
 /// Back-compat alias used by some rooms.

@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../core/app_state_scope.dart';
@@ -11,6 +10,7 @@ import '../../core/signal_mute_store.dart';
 import '../../core/signal_store.dart';
 import '../../core/task_item.dart';
 import '../../core/task_store.dart';
+import '../../core/corkboard_store.dart';
 import '../room_frame.dart';
 import '../theme/tempus_ui.dart';
 import '../widgets/signal_detail_sheet.dart';
@@ -24,9 +24,10 @@ class SignalBayRoom extends StatefulWidget {
 }
 
 class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserver {
-  Timer? _autoRefresh;
   List<SignalItem> _signals = const [];
   bool _loading = true;
+
+  Timer? _refreshTimer;
 
   Set<String> _mutedPkgs = const <String>{};
 
@@ -35,12 +36,12 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
-    _autoRefresh = Timer.periodic(const Duration(seconds: 30), (_) => _pullNativeSignals());
+    _refreshTimer = Timer.periodic(const Duration(seconds: 8), (_) => _pullNativeSignals());
   }
 
   @override
   void dispose() {
-    _autoRefresh?.cancel();
+    _refreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -65,19 +66,6 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
   }
 
   Future<void> _persist() async => SignalStore.save(_signals);
-
-  Future<void> _refresh() async {
-    await _pullNativeSignals();
-    final items = await SignalStore.load();
-    final muted = await SignalMuteStore.loadMutedPackages();
-    if (!mounted) return;
-    setState(() {
-      _signals = items;
-      _mutedPkgs = muted;
-      _loading = false;
-    });
-  }
-
 
   String _fingerprint(String pkg, String title, String body) => '$pkg|$title|$body';
 
@@ -217,101 +205,82 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     if (items.isEmpty) return empty;
 
     return RefreshIndicator(
-      onRefresh: _refresh,
+      onRefresh: () async {
+        await _pullNativeSignals();
+        await _load();
+      },
       child: ListView.separated(
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (ctx, i) {
-          final s = items[i];
-          final cs = Theme.of(ctx).colorScheme;
+      physics: const AlwaysScrollableScrollPhysics(),
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (ctx, i) {
+        final s = items[i];
+        final cs = Theme.of(ctx).colorScheme;
 
-          final tile = TempusCard(
-            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  margin: const EdgeInsets.only(top: 6),
-                  decoration: BoxDecoration(
-                    color: cs.primary.withOpacity(.95),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
+        final tile = TempusCard(
+          padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                margin: const EdgeInsets.only(top: 6),
+                decoration: BoxDecoration(
+                  color: cs.primary.withOpacity(.95),
+                  borderRadius: BorderRadius.circular(99),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        s.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface),
-                      ),
-                      if ((s.body ?? '').trim().isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          s.body!,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: cs.onSurface.withOpacity(.78)),
-                        ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(s.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
+                    const SizedBox(height: 4),
+                    Text(
+                      s.body ?? s.source,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        TempusPill(text: s.source),
+                        if (s.count > 1) TempusPill(text: '${s.count}×'),
                       ],
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Text(
-                            s.source,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(.55)),
-                          ),
-                          const Spacer(),
-                          if (s.count > 1)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: cs.primary.withOpacity(.10),
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(color: cs.primary.withOpacity(.25)),
-                              ),
-                              child: Text(
-                                'x${s.count}',
-                                style: TextStyle(fontWeight: FontWeight.w700, color: cs.primary),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                Icon(Icons.chevron_right_rounded, color: cs.onSurface.withOpacity(.55)),
-              ],
-            ),
-          );
+              ),
+              Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+            ],
+          ),
+        );
 
-          return Dismissible(
-            key: ValueKey('sig_${s.fingerprint}'),
-            background: _swipeBg(ctx, Icons.playlist_add, 'Task'),
-            secondaryBackground: _swipeBg(ctx, Icons.delete_outline, 'Recycle', right: true),
-            confirmDismiss: (dir) async {
-              if (dir == DismissDirection.startToEnd) {
-                await _toTask(s);
-                return false; // keep visible in log; task action should feel instant
-              } else {
-                await _toRecycle(s);
-                return true;
-              }
-            },
-            child: InkWell(
-              onTap: () => _openDetails(s),
-              borderRadius: BorderRadius.circular(18),
-              child: tile,
-            ),
-          );
-        },
+        return Dismissible(
+          key: ValueKey('sig_${s.fingerprint}'),
+          background: _swipeBg(ctx, Icons.playlist_add, 'Task'),
+          secondaryBackground: _swipeBg(ctx, Icons.delete_outline, 'Recycle', right: true),
+          confirmDismiss: (dir) async {
+            if (dir == DismissDirection.startToEnd) {
+              await _showActions(s);
+              return false;
+            } else {
+              await _toRecycle(s);
+              return true;
+            }
+          },
+          child: InkWell(
+            onTap: () => _openDetails(s),
+            borderRadius: BorderRadius.circular(18),
+            child: tile,
+          ),
+        );
+      },
       ),
     );
   }
@@ -335,6 +304,49 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
           if (right) Icon(icon, color: cs.primary),
         ],
       ),
+    );
+  }
+
+  Future<void> _showActions(SignalItem s) async {
+    if (!mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.task_alt, color: cs.primary),
+                title: const Text('Create Task'),
+                subtitle: const Text('Promote this signal into Tasks.'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await _toTask(s);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.push_pin, color: cs.secondary),
+                title: const Text('Corkboard It'),
+                subtitle: const Text('Pin it as a note (no due date).'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  final text = ('${s.title}\n${s.body}'.trim());
+                  await CorkboardStore.addText(text);
+                  await MetricsStore.inc('corkboardCreated');
+                  await _acknowledge(s, true);
+                  if (!mounted) return;
+                  AppStateScope.of(context).setSelectedModule('corkboard');
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
     );
   }
 

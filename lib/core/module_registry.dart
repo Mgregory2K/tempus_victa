@@ -11,6 +11,7 @@ import '../ui/rooms/projects_room.dart';
 import '../ui/rooms/recycle_bin_room.dart';
 import '../ui/rooms/ready_room.dart';
 import '../ui/rooms/settings_room.dart';
+import '../ui/rooms/corkboard_room.dart';
 
 class ModuleRegistry {
   /// Default module list (used to seed first-run and as a reset fallback).
@@ -46,7 +47,7 @@ class ModuleRegistry {
           name: 'Corkboard',
           icon: Icons.note_alt_rounded,
           usesCarousel: true,
-          builder: ({required roomName}) => PlaceholderRoom(roomName: roomName),
+          builder: ({required roomName}) => CorkboardRoom(roomName: roomName),
         ),
         ModuleDef(
           id: 'tasks',
