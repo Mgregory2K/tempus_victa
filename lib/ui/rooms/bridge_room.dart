@@ -7,6 +7,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/app_state_scope.dart';
+import '../../core/metrics_store.dart';
 import '../../core/task_item.dart';
 import '../../core/task_store.dart';
 import '../room_frame.dart';
@@ -155,6 +156,9 @@ class _BridgeRoomState extends State<BridgeRoom> {
 
     await TaskStore.upsert(task);
 
+    // Metrics: voice task created.
+    await MetricsStore.inc(TvMetrics.tasksCreatedVoice);
+
     if (!mounted) return;
     AppStateScope.of(context).bumpTasksVersion();
 
@@ -168,10 +172,50 @@ class _BridgeRoomState extends State<BridgeRoom> {
     return RoomFrame(
       title: widget.roomName,
       child: Center(
-        child: Text(
-          _isRecording ? 'Recording…' : 'Bridge',
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
+        child: _isRecording
+            ? Text('Recording…', style: Theme.of(context).textTheme.headlineMedium)
+            : FutureBuilder<Map<String, int>>(
+                future: MetricsStore.todaySnapshot(const [
+                  TvMetrics.signalsIngested,
+                  TvMetrics.tasksCreatedManual,
+                  TvMetrics.tasksCreatedVoice,
+                  TvMetrics.webSearches,
+                  TvMetrics.aiCalls,
+                ]),
+                builder: (context, snap) {
+                  final theme = Theme.of(context);
+                  final m = snap.data ?? const {};
+                  return Container(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: theme.dividerColor.withOpacity(0.18)),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Today', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 10),
+                        _metricRow(theme, 'Signals', m[TvMetrics.signalsIngested] ?? 0),
+                        _metricRow(theme, 'Tasks (manual)', m[TvMetrics.tasksCreatedManual] ?? 0),
+                        _metricRow(theme, 'Tasks (voice)', m[TvMetrics.tasksCreatedVoice] ?? 0),
+                        _metricRow(theme, 'Web searches', m[TvMetrics.webSearches] ?? 0),
+                        _metricRow(theme, 'AI replies', m[TvMetrics.aiCalls] ?? 0),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Hold the mic to capture a voice task.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
       ),
       floating: GestureDetector(
         onLongPressStart: (_) => _startRecording(),
@@ -181,6 +225,28 @@ class _BridgeRoomState extends State<BridgeRoom> {
           onPressed: () {},
           child: Icon(_isRecording ? Icons.mic : Icons.mic_none_rounded),
         ),
+      ),
+    );
+  }
+
+  Widget _metricRow(ThemeData theme, String label, int value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.8),
+              ),
+            ),
+          ),
+          Text(
+            value.toString(),
+            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ],
       ),
     );
   }

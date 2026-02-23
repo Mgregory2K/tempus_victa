@@ -7,6 +7,7 @@ import '../../core/signal_item.dart';
 import '../../core/signal_store.dart';
 import '../../core/task_item.dart';
 import '../../core/task_store.dart';
+import '../../core/metrics_store.dart';
 import '../room_frame.dart';
 
 class SignalBayRoom extends StatefulWidget {
@@ -96,10 +97,15 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     }).toList();
 
     final existingIds = _signals.map((s) => s.id).toSet();
+    final newOnes = incoming.where((s) => !existingIds.contains(s.id)).toList(growable: false);
     final merged = <SignalItem>[
-      ...incoming.where((s) => !existingIds.contains(s.id)),
+      ...newOnes,
       ..._signals,
     ];
+
+    if (newOnes.isNotEmpty) {
+      await MetricsStore.inc(TvMetrics.signalsIngested, newOnes.length);
+    }
 
     if (!mounted) return;
     setState(() => _signals = merged);
@@ -116,6 +122,7 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
 
     final tasks = await TaskStore.load();
     await TaskStore.save([task, ...tasks]);
+    await MetricsStore.inc(TvMetrics.signalsPromotedToTask);
     AppStateScope.of(context).bumpTasksVersion();
 
     setState(() => _signals = _signals.where((x) => x.id != s.id).toList(growable: false));
@@ -128,6 +135,7 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
   Future<void> _toRecycle(SignalItem s) async {
     final bin = await RecycleBinStore.loadSignals();
     await RecycleBinStore.saveSignals([s, ...bin]);
+    await MetricsStore.inc(TvMetrics.signalsRecycled);
 
     setState(() => _signals = _signals.where((x) => x.id != s.id).toList(growable: false));
     await _persist();

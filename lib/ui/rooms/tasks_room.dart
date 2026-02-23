@@ -9,6 +9,7 @@ import '../../core/project_store.dart';
 import '../../core/recycle_bin_store.dart';
 import '../../core/task_item.dart';
 import '../../core/task_store.dart';
+import '../../core/metrics_store.dart';
 import '../room_frame.dart';
 
 class TasksRoom extends StatefulWidget {
@@ -56,6 +57,8 @@ class _TasksRoomState extends State<TasksRoom> {
 
     final tasks = await TaskStore.load();
     await TaskStore.save([t, ...tasks]);
+
+    await MetricsStore.inc(TvMetrics.tasksCreatedManual);
 
     if (!mounted) return;
     AppStateScope.of(context).bumpTasksVersion();
