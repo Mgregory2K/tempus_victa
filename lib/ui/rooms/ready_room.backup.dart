@@ -8,14 +8,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/metrics_store.dart';
 import '../../core/ready_room_store.dart';
-import '../../core/sources_of_truth_store.dart';
 import '../../core/twin_plus/router.dart';
 import '../../core/twin_plus/shaper.dart';
 import '../../core/twin_plus/twin_plus_scope.dart';
 import '../../core/twin_plus/twin_event.dart';
 import '../../services/ai/ai_settings_store.dart';
 import '../../services/ai/openai_client.dart';
-import '../../services/web/web_search_client.dart';
 import '../theme/tv_textfield.dart';
 
 class ReadyRoom extends StatefulWidget {
@@ -36,56 +34,6 @@ class _ReadyRoomState extends State<ReadyRoom> {
 
   bool _protocolActive = false;
   ProtocolConfig? _protocolConfig;
-
-  // ===========================
-  // ADD: prompt history (↑ / ↓)
-  // ===========================
-  final List<String> _promptHistory = <String>[];
-  int _promptHistoryIndex = -1;
-
-  void _historyUp() {
-    if (_promptHistory.isEmpty) return;
-
-    // Only recall when caret is at the start (so arrow-up still works in multiline editing).
-    final sel = _ctrl.selection;
-    final caretAtStart = sel.isValid && sel.baseOffset <= 0 && sel.extentOffset <= 0;
-    if (!caretAtStart) return;
-
-    if (_promptHistoryIndex == -1) {
-      _promptHistoryIndex = _promptHistory.length; // one past end
-    }
-    if (_promptHistoryIndex > 0) _promptHistoryIndex--;
-
-    final v = _promptHistory[_promptHistoryIndex];
-    _ctrl.value = TextEditingValue(
-      text: v,
-      selection: TextSelection.collapsed(offset: v.length),
-      composing: TextRange.empty,
-    );
-  }
-
-  void _historyDown() {
-    if (_promptHistory.isEmpty) return;
-
-    final sel = _ctrl.selection;
-    final caretAtEnd = sel.isValid && sel.baseOffset >= _ctrl.text.length && sel.extentOffset >= _ctrl.text.length;
-    if (!caretAtEnd) return;
-
-    if (_promptHistoryIndex == -1) return;
-
-    if (_promptHistoryIndex < _promptHistory.length - 1) {
-      _promptHistoryIndex++;
-      final v = _promptHistory[_promptHistoryIndex];
-      _ctrl.value = TextEditingValue(
-        text: v,
-        selection: TextSelection.collapsed(offset: v.length),
-        composing: TextRange.empty,
-      );
-    } else {
-      _promptHistoryIndex = -1;
-      _ctrl.clear();
-    }
-  }
 
   @override
   void initState() {
@@ -167,10 +115,6 @@ class _ReadyRoomState extends State<ReadyRoom> {
       _protocolActive = false;
       _protocolConfig = null;
     });
-
-    // ADD: clear prompt history (session)
-    _promptHistory.clear();
-    _promptHistoryIndex = -1;
   }
 
   Future<void> _exportFeed() async {
@@ -265,8 +209,7 @@ class _ReadyRoomState extends State<ReadyRoom> {
       if (m.text.startsWith(ProtocolMarkers.cfgPrefix)) {
         final cfg = ProtocolConfig.tryParse(m.text);
         if (cfg != null) {
-          b.writeln(
-              '**Protocol Config:** intent=${cfg.intent}; issue=${cfg.issue}; figures=${cfg.figures.join(', ')}; surpriseEntrants=${cfg.allowSurpriseEntrants}');
+          b.writeln('**Protocol Config:** intent=${cfg.intent}; issue=${cfg.issue}; figures=${cfg.figures.join(', ')}; surpriseEntrants=${cfg.allowSurpriseEntrants}');
           if (cfg.maxSentences != null) b.writeln('**Constraint:** maxSentences=${cfg.maxSentences}');
           if (cfg.maxChars != null) b.writeln('**Constraint:** maxChars=${cfg.maxChars}');
           if (cfg.noFollowUps) b.writeln('**Constraint:** noFollowUps=true');
@@ -325,12 +268,6 @@ class _ReadyRoomState extends State<ReadyRoom> {
       _ctrl.clear();
     });
 
-    // ===========================
-    // ADD: remember prompt
-    // ===========================
-    _promptHistory.add(text);
-    _promptHistoryIndex = -1;
-
     await _append('user', text);
 
     final kernel = TwinPlusScope.of(context);
@@ -349,18 +286,12 @@ class _ReadyRoomState extends State<ReadyRoom> {
       }
 
       // Minimal intent: Ready Room is generally planning/synthesis unless you explicitly treat it as app-howto elsewhere.
-      final recentUserTurns = _msgs
-          .where((m) => m.role == 'user')
-          .map((m) => m.text)
-          .toList();
-      final sig = IntentSignals.analyze(text, recentUserTurns: recentUserTurns);
-
       final intent = QueryIntent(
         surface: 'ready_room',
         queryText: text,
-        taskType: sig.taskType,
+        taskType: TaskType.planning,
         timeHorizon: 'today',
-        needsVerifiableFacts: sig.needsVerifiableFacts,
+        needsVerifiableFacts: false,
       );
 
       final plan = kernel.route(intent);
@@ -373,8 +304,6 @@ class _ReadyRoomState extends State<ReadyRoom> {
           aiEnabled: aiEnabled && plan.aiAllowed,
           apiKey: apiKey,
           maxOutputTokens: plan.budgetTokensMax,
-          webFirst: plan.strategy.contains('web'),
-          llmAllowedByPlan: plan.strategy.contains('llm'),
         );
       } else {
         reply = await _normalRespond(
@@ -382,8 +311,6 @@ class _ReadyRoomState extends State<ReadyRoom> {
           aiEnabled: aiEnabled && plan.aiAllowed,
           apiKey: apiKey,
           maxOutputTokens: plan.budgetTokensMax,
-          webFirst: plan.strategy.contains('web'),
-          llmAllowedByPlan: plan.strategy.contains('llm'),
         );
       }
 
@@ -406,139 +333,31 @@ class _ReadyRoomState extends State<ReadyRoom> {
     }
   }
 
-  // ===========================
-  // ADD: multi-turn context + freshness
-  // ===========================
-  String _buildAiContextPrompt({
-    required String userInput,
-    String? modeLabel,
-  }) {
-    final nowYear = DateTime.now().year;
-
-    final b = StringBuffer();
-    b.writeln('FRESHNESS RULE: If you reference “latest/current/recent/last” events, assume the current year is $nowYear unless the user explicitly provides a date/year.');
-    b.writeln('FOLLOW-UP RULE: Treat the user’s message as a continuation of this conversation unless the user explicitly starts a new topic.');
-    if (modeLabel != null && modeLabel.trim().isNotEmpty) {
-      b.writeln('MODE: $modeLabel');
-    }
-    b.writeln();
-    b.writeln('CONVERSATION CONTEXT (most recent last):');
-
-    // Keep last N messages; skip raw protocol config markers to avoid poisoning context.
-    const int maxMsgs = 14;
-    final recent = _msgs.length > maxMsgs ? _msgs.sublist(_msgs.length - maxMsgs) : _msgs;
-
-    for (final m in recent) {
-      final t = m.text;
-      if (t.startsWith(ProtocolMarkers.cfgPrefix)) continue;
-      if (t.startsWith(ProtocolMarkers.start)) {
-        b.writeln('SYSTEM: [READY ROOM PROTOCOL START]');
-        continue;
-      }
-      if (t.startsWith(ProtocolMarkers.end)) {
-        b.writeln('SYSTEM: [READY ROOM PROTOCOL END]');
-        continue;
-      }
-      final role = (m.role == 'assistant') ? 'ASSISTANT' : (m.role == 'user') ? 'USER' : 'SYSTEM';
-      b.writeln('$role: ${m.text}');
-    }
-
-    b.writeln();
-    b.writeln('USER: $userInput');
-
-    return b.toString();
-  }
-
-  Future<String> _normalRespond({
-    required String input,
-    required bool aiEnabled,
-    required String? apiKey,
-    int maxOutputTokens = 600,
-    required bool webFirst,
-    required bool llmAllowedByPlan,
-  }) async {
-    _WebBundle? web;
-    if (webFirst) {
-      web = await _fetchWeb(input);
-      await MetricsStore.inc(TvMetrics.webSearches);
-    }
-
-    final canLlm = aiEnabled && llmAllowedByPlan && apiKey != null && apiKey.isNotEmpty;
-    if (canLlm) {
+  Future<String> _normalRespond({required String input, required bool aiEnabled, required String? apiKey, int maxOutputTokens = 600}) async {
+    if (aiEnabled && apiKey != null && apiKey.isNotEmpty) {
       final model = await AiSettingsStore.getModel() ?? 'gpt-4o-mini';
-      final stitched = _buildAiContextPrompt(userInput: input, modeLabel: 'Normal');
-
-      final prompt = (web == null)
-          ? stitched
-          : _joinBlocks([
-              stitched,
-              'WEB RESULTS (use these for anything time-sensitive; include a couple of source links at the end):',
-              web.forPrompt,
-            ]);
-
-      final out = await OpenAiClient(apiKey: apiKey, model: model).respondText(
-        input: prompt,
-        maxOutputTokens: maxOutputTokens,
-      );
+      final out = await OpenAiClient(apiKey: apiKey, model: model).respondText(input: input, maxOutputTokens: maxOutputTokens);
       await MetricsStore.inc(TvMetrics.aiCalls);
       return out.text;
     }
 
-    // No-AI path.
-    if (web != null) return web.forUser;
     await MetricsStore.inc(TvMetrics.webSearches);
-    final w = await _fetchWeb(input);
-    return w.forUser;
+    return _webFallback(input);
   }
 
-  Future<String> _protocolRespond({
-    required String input,
-    required bool aiEnabled,
-    required String? apiKey,
-    int maxOutputTokens = 600,
-    required bool webFirst,
-    required bool llmAllowedByPlan,
-  }) async {
+  Future<String> _protocolRespond({required String input, required bool aiEnabled, required String? apiKey, int maxOutputTokens = 600}) async {
     final cfg = _protocolConfig ?? ProtocolConfig.defaultConfig();
 
-    _WebBundle? web;
-    if (webFirst) {
-      web = await _fetchWeb(input);
-      await MetricsStore.inc(TvMetrics.webSearches);
-    }
-
-    final canLlm = aiEnabled && llmAllowedByPlan && apiKey != null && apiKey.isNotEmpty;
-    if (canLlm) {
+    if (aiEnabled && apiKey != null && apiKey.isNotEmpty) {
       final model = await AiSettingsStore.getModel() ?? 'gpt-4o-mini';
-
-      final protocolPrompt = _buildProtocolPrompt(cfg, input);
-      final stitched = _buildAiContextPrompt(userInput: protocolPrompt, modeLabel: 'Protocol');
-
-      final prompt = (web == null)
-          ? stitched
-          : _joinBlocks([
-              stitched,
-              'WEB RESULTS (use these for any time-sensitive claims; include a couple of links at the end):',
-              web.forPrompt,
-            ]);
-
-      final out = await OpenAiClient(apiKey: apiKey, model: model).respondText(
-        input: prompt,
-        maxOutputTokens: maxOutputTokens,
-      );
+      final prompt = _buildProtocolPrompt(cfg, input);
+      final out = await OpenAiClient(apiKey: apiKey, model: model).respondText(input: prompt, maxOutputTokens: maxOutputTokens);
       await MetricsStore.inc(TvMetrics.aiCalls);
       return out.text;
     }
 
     // No-AI fallback: still useful, still structured, still multi-turn.
-    if (web != null) {
-      return _joinBlocks([
-        _protocolLocalFallback(cfg, input),
-        '',
-        'Web results you can open:',
-        web.forUser,
-      ]);
-    }
+    await MetricsStore.inc(TvMetrics.webSearches);
     return _protocolLocalFallback(cfg, input);
   }
 
@@ -585,74 +404,6 @@ class _ReadyRoomState extends State<ReadyRoom> {
     return b.toString();
   }
 
-  static String _joinBlocks(List<String> blocks) {
-    final b = StringBuffer();
-    for (final s in blocks) {
-      if (s.trim().isEmpty) {
-        b.writeln();
-      } else {
-        b.writeln(s.trimRight());
-        b.writeln();
-      }
-    }
-    return b.toString().trimRight();
-  }
-
-  Future<_WebBundle> _fetchWeb(String query) async {
-    try {
-      final res = await WebSearchClient().search(query, maxLinks: 5);
-      final trusted = await SourcesOfTruthStore.trustedDomains(minTrust: 0.75);
-      // Update usage counters for surfaced domains.
-      for (final r in res.links) {
-        final d = _domainFromUrl(r.url);
-        if (d.isNotEmpty) {
-          await SourcesOfTruthStore.markDomainUsed(d);
-        }
-      }
-      return _formatWeb(res, trustedDomains: trusted);
-    } catch (_) {
-      return _WebBundle(forUser: _webFallback(query), forPrompt: _webFallback(query));
-    }
-  }
-
-  _WebBundle _formatWeb(WebSearchResponse res, {required Set<String> trustedDomains}) {
-    final user = StringBuffer();
-    final prompt = StringBuffer();
-
-    if ((res.abstractText ?? '').trim().isNotEmpty) {
-      user.writeln(res.abstractText!.trim());
-      user.writeln();
-      prompt.writeln('Abstract: ${res.abstractText!.trim()}');
-    }
-
-    if (res.links.isEmpty) {
-      user.writeln('No web results returned.');
-      return _WebBundle(forUser: user.toString().trimRight(), forPrompt: prompt.toString().trimRight());
-    }
-
-    user.writeln('Top web results:');
-    prompt.writeln('Top results:');
-
-    for (final r in res.links) {
-      final d = _domainFromUrl(r.url);
-      final tag = trustedDomains.contains(d) ? ' (trusted)' : '';
-      user.writeln('• ${r.titleOrSnippet}$tag');
-      user.writeln('  ${r.url}');
-
-      prompt.writeln('- ${r.titleOrSnippet}$tag | ${r.url}');
-    }
-
-    return _WebBundle(forUser: user.toString().trimRight(), forPrompt: prompt.toString().trimRight());
-  }
-
-  static String _domainFromUrl(String url) {
-    final u = Uri.tryParse(url);
-    if (u == null) return '';
-    var h = u.host.toLowerCase();
-    if (h.startsWith('www.')) h = h.substring(4);
-    return h;
-  }
-
   String _webFallback(String q) {
     final enc = Uri.encodeComponent(q);
     final ddg = 'https://duckduckgo.com/?q=$enc';
@@ -660,6 +411,7 @@ class _ReadyRoomState extends State<ReadyRoom> {
     return 'Here are some results you can open:\n\n• $ddg\n• $google';
   }
 
+  
   Future<void> _feedback(String kind) async {
     final kernel = TwinPlusScope.of(context);
     kernel.observe(TwinEvent.feedbackGiven(surface: 'ready_room', feedback: kind, decisionId: _lastDecisionId));
@@ -692,61 +444,6 @@ class _ReadyRoomState extends State<ReadyRoom> {
     );
   }
 
-  
-  Future<void> _setVote(String msgId, int? vote) async {
-    final idx = _msgs.indexWhere((m) => m.id == msgId);
-    if (idx == -1) return;
-    final cur = _msgs[idx];
-
-    // Only allow voting on assistant messages (ignore otherwise).
-    if (cur.role != 'assistant') return;
-
-    // Normalize vote
-    final nextVote = (vote == null) ? null : (vote > 0 ? 1 : -1);
-
-    final updated = cur.copyWith(vote: nextVote);
-    final next = [..._msgs];
-    next[idx] = updated;
-
-    setState(() => _msgs = next);
-    await ReadyRoomStore.save(next);
-
-    // Emit explicit feedback to Twin+ (local-only)
-    final kernel = TwinPlusScope.of(context);
-    kernel.observe(
-      TwinEvent.feedbackGiven(
-        surface: 'ready_room',
-        feedback: nextVote == 1 ? 'upvote' : nextVote == -1 ? 'downvote' : 'vote_cleared',
-        decisionId: _lastDecisionId,
-      ),
-    );
-  }
-
-  Future<void> _toggleWrongSource(String msgId) async {
-    final idx = _msgs.indexWhere((m) => m.id == msgId);
-    if (idx == -1) return;
-    final cur = _msgs[idx];
-
-    if (cur.role != 'assistant') return;
-
-    final updated = cur.copyWith(wrongSource: !cur.wrongSource);
-    final next = [..._msgs];
-    next[idx] = updated;
-
-    setState(() => _msgs = next);
-    await ReadyRoomStore.save(next);
-
-    final kernel = TwinPlusScope.of(context);
-    kernel.observe(
-      TwinEvent.feedbackGiven(
-        surface: 'ready_room',
-        feedback: updated.wrongSource ? 'wrong_source' : 'wrong_source_cleared',
-        decisionId: _lastDecisionId,
-      ),
-    );
-  }
-
-
 void _jumpBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
@@ -768,113 +465,105 @@ void _jumpBottom() {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Column(
-        children: [
-          SizedBox(
-            height: 52,
-            child: Row(
+      children: [
+        SizedBox(
+          height: 52,
+          child: Row(
+            children: [
+              const SizedBox(width: 12),
+              Text(
+                _protocolActive ? 'Ready Room — Protocol Active' : 'Ready Room',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              const Spacer(),
+              if (!_protocolActive)
+                IconButton(
+                  tooltip: 'Invoke Protocol',
+                  onPressed: _invokeProtocol,
+                  icon: const Icon(Icons.rule_rounded),
+                )
+              else
+                IconButton(
+                  tooltip: 'End Protocol',
+                  onPressed: _endProtocol,
+                  icon: const Icon(Icons.stop_circle_outlined),
+                ),
+              IconButton(
+                tooltip: 'Export',
+                onPressed: _exportFeed,
+                icon: const Icon(Icons.ios_share),
+              ),
+              IconButton(
+                tooltip: 'Clear history',
+                onPressed: _clearHistory,
+                icon: const Icon(Icons.delete_outline),
+              ),
+              const SizedBox(width: 6),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView.builder(
+            controller: _scroll,
+            padding: const EdgeInsets.all(12),
+            itemCount: _msgs.length,
+            itemBuilder: (_, i) => _ReadyRoomRow(
+              msg: _msgs[i],
+              onTapUrl: _openUrl,
+            ),
+          ),
+        ),
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(width: 12),
-                Text(
-                  _protocolActive ? 'Ready Room — Protocol Active' : 'Ready Room',
-                  style: const TextStyle(fontWeight: FontWeight.w900),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TvTextField(
+                        controller: _ctrl,
+                        hintText: _protocolActive ? 'Protocol input…' : 'Ask anything…',
+                        onSubmitted: (_) => _send(),
+                        twinSurface: 'ready_room',
+                        twinFieldId: 'input',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: _busy ? null : _send,
+                      icon: _busy
+                          ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.send),
+                    ),
+                  ],
                 ),
-                const Spacer(),
-                if (!_protocolActive)
-                  IconButton(
-                    tooltip: 'Invoke Protocol',
-                    onPressed: _invokeProtocol,
-                    icon: const Icon(Icons.rule_rounded),
-                  )
-                else
-                  IconButton(
-                    tooltip: 'End Protocol',
-                    onPressed: _endProtocol,
-                    icon: const Icon(Icons.stop_circle_outlined),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      const Text('Twin+ quick feedback:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      ActionChip(label: const Text('Too long'), onPressed: () => _feedback('Too long')),
+                      ActionChip(label: const Text('Wrong source / stale'), onPressed: () => _feedback('Wrong source / stale')),
+                      ActionChip(label: const Text('Stop asking questions'), onPressed: () => _feedback('Stop asking questions')),
+                      ActionChip(label: const Text('Just the facts… ON'), onPressed: () => _feedback('Just the facts')),
+                      ActionChip(label: const Text('Just the facts… OFF'), onPressed: _toggleJustFactsOff),
+                    ],
                   ),
-                IconButton(
-                  tooltip: 'Export',
-                  onPressed: _exportFeed,
-                  icon: const Icon(Icons.ios_share),
                 ),
-                IconButton(
-                  tooltip: 'Clear history',
-                  onPressed: _clearHistory,
-                  icon: const Icon(Icons.delete_outline),
-                ),
-                const SizedBox(width: 6),
               ],
             ),
           ),
-          const Divider(height: 1),
-          Expanded(
-            child: ListView.builder(
-              controller: _scroll,
-              padding: const EdgeInsets.all(12),
-              itemCount: _msgs.length,
-              itemBuilder: (_, i) => _ReadyRoomRow(
-                msg: _msgs[i],
-                onTapUrl: _openUrl,
-                onVote: (v) => _setVote(_msgs[i].id, v),
-                onToggleWrongSource: () => _toggleWrongSource(_msgs[i].id),
-              ),
-            ),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: CallbackShortcuts(
-                          bindings: <ShortcutActivator, VoidCallback>{
-                            const SingleActivator(LogicalKeyboardKey.arrowUp): _historyUp,
-                            const SingleActivator(LogicalKeyboardKey.arrowDown): _historyDown,
-                          },
-                          child: TvTextField(
-                            controller: _ctrl,
-                            hintText: _protocolActive ? 'Protocol input…' : 'Ask anything…',
-                            onSubmitted: (_) => _send(),
-                            twinSurface: 'ready_room',
-                            twinFieldId: 'input',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: _busy ? null : _send,
-                        icon: _busy
-                            ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.send),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [
-                        const Text('Twin+ quick feedback:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                        ActionChip(label: const Text('Too long'), onPressed: () => _feedback('Too long')),
-                        ActionChip(label: const Text('Wrong source / stale'), onPressed: () => _feedback('Wrong source / stale')),
-                        ActionChip(label: const Text('Stop asking questions'), onPressed: () => _feedback('Stop asking questions')),
-                        ActionChip(label: const Text('Just the facts… ON'), onPressed: () => _feedback('Just the facts')),
-                        ActionChip(label: const Text('Just the facts… OFF'), onPressed: _toggleJustFactsOff),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
+    ),
     );
   }
 }
@@ -1096,17 +785,7 @@ class _ReadyRoomRow extends StatelessWidget {
   final ReadyRoomMessage msg;
   final Future<void> Function(String url) onTapUrl;
 
-  /// Per-assistant-message explicit feedback.
-  /// vote: 1=up, -1=down, null=clear
-  final void Function(int? vote) onVote;
-  final VoidCallback onToggleWrongSource;
-
-  const _ReadyRoomRow({
-    required this.msg,
-    required this.onTapUrl,
-    required this.onVote,
-    required this.onToggleWrongSource,
-  });
+  const _ReadyRoomRow({required this.msg, required this.onTapUrl});
 
   static final _urlRe = RegExp(r'(https?:\/\/[^\s]+)', caseSensitive: false);
 
@@ -1138,59 +817,8 @@ class _ReadyRoomRow extends StatelessWidget {
             child: _buildRich(context, msg.text),
           ),
         ),
-        if (!isUser && msg.role == 'assistant')
-          Padding(
-            padding: const EdgeInsets.only(left: 6, right: 6, bottom: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                _tinyIcon(
-                  context,
-                  icon: Icons.thumb_up_alt_outlined,
-                  selected: msg.vote == 1,
-                  tooltip: 'Helpful',
-                  onTap: () => onVote(msg.vote == 1 ? null : 1),
-                ),
-                _tinyIcon(
-                  context,
-                  icon: Icons.thumb_down_alt_outlined,
-                  selected: msg.vote == -1,
-                  tooltip: 'Not helpful',
-                  onTap: () => onVote(msg.vote == -1 ? null : -1),
-                ),
-                _tinyIcon(
-                  context,
-                  icon: msg.wrongSource ? Icons.link_off : Icons.link,
-                  selected: msg.wrongSource,
-                  tooltip: msg.wrongSource ? 'Wrong source (marked)' : 'Mark wrong source',
-                  onTap: onToggleWrongSource,
-                ),
-              ],
-            ),
-          ),
         const SizedBox(height: 6),
       ],
-    );
-  }
-
-
-  Widget _tinyIcon(
-    BuildContext context, {
-    required IconData icon,
-    required bool selected,
-    required String tooltip,
-    required VoidCallback onTap,
-  }) {
-    final cs = Theme.of(context).colorScheme;
-    final color = selected ? cs.primary : cs.onSurfaceVariant;
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: onTap,
-      visualDensity: VisualDensity.compact,
-      padding: const EdgeInsets.all(2),
-      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-      iconSize: 18,
-      icon: Icon(icon, color: color),
     );
   }
 
@@ -1239,13 +867,4 @@ class _ReadyRoomRow extends StatelessWidget {
     if (idx < text.length) spans.add(TextSpan(text: text.substring(idx)));
     return RichText(text: TextSpan(style: Theme.of(context).textTheme.bodyMedium, children: spans));
   }
-}
-
-// Intentionally tiny struct for web results.
-// forUser: readable list for UI
-// forPrompt: compact list for model conditioning
-class _WebBundle {
-  final String forUser;
-  final String forPrompt;
-  const _WebBundle({required this.forUser, required this.forPrompt});
 }

@@ -9,6 +9,10 @@ import 'package:path_provider/path_provider.dart';
 /// - Lives in app documents directory so it can grow over time.
 /// - Not AI-dependent.
 class SourcesOfTruthStore {
+  // Keep this list bounded. It's a hint list, not an ever-growing archive.
+  static const int maxDomains = 250;
+  static const int maxEvents = 600;
+
   static Future<File> _file() async {
     final dir = await getApplicationDocumentsDirectory();
     final folder = Directory('${dir.path}/tempus/sources');
@@ -38,35 +42,154 @@ class SourcesOfTruthStore {
 
   static Future<void> save(Map<String, dynamic> data) async {
     final f = await _file();
-    await f.writeAsString(const JsonEncoder.withIndent('  ').convert(data), flush: true);
+    final pruned = _prune(data);
+    await f.writeAsString(const JsonEncoder.withIndent('  ').convert(pruned), flush: true);
   }
 
   static Future<void> upsertDomain(Map<String, dynamic> domainEntry) async {
     await ensureSeeded();
     final data = await load();
     final list = (data['domains'] is List) ? (data['domains'] as List) : <dynamic>[];
-    final domain = (domainEntry['domain'] ?? '').toString().trim().toLowerCase();
+    final domain = _normalizeDomain((domainEntry['domain'] ?? '').toString());
     if (domain.isEmpty) return;
 
     int idx = -1;
     for (int i = 0; i < list.length; i++) {
       final item = list[i];
-      if (item is Map && (item['domain'] ?? '').toString().toLowerCase() == domain) {
+      if (item is Map && _normalizeDomain('${item['domain'] ?? ''}') == domain) {
         idx = i;
         break;
       }
     }
 
+    final now = DateTime.now().toUtc().toIso8601String();
     if (idx >= 0) {
       final existing = (list[idx] is Map) ? (list[idx] as Map).cast<String, dynamic>() : <String, dynamic>{};
-      list[idx] = {...existing, ...domainEntry, 'domain': domain};
+      final merged = <String, dynamic>{...existing, ...domainEntry, 'domain': domain};
+      // Preserve usage counters unless explicitly provided.
+      merged['uses'] = domainEntry.containsKey('uses') ? domainEntry['uses'] : (existing['uses'] ?? 0);
+      merged['lastUsedAtUtc'] = domainEntry.containsKey('lastUsedAtUtc')
+          ? domainEntry['lastUsedAtUtc']
+          : (existing['lastUsedAtUtc'] ?? existing['updatedAtUtc']);
+      merged['createdAtUtc'] = existing['createdAtUtc'] ?? now;
+      merged['updatedAtUtc'] = now;
+      list[idx] = merged;
     } else {
-      list.insert(0, {...domainEntry, 'domain': domain});
+      list.insert(0, {
+        ...domainEntry,
+        'domain': domain,
+        'uses': domainEntry['uses'] ?? 0,
+        'createdAtUtc': now,
+        'updatedAtUtc': now,
+        'lastUsedAtUtc': domainEntry['lastUsedAtUtc'] ?? now,
+      });
     }
 
     data['domains'] = list;
     data['generatedAtUtc'] = DateTime.now().toUtc().toIso8601String();
     await save(data);
+  }
+
+  /// Bookkeeping: call when a domain is shown to the user.
+  static Future<void> markDomainUsed(String domain, {int bump = 1}) async {
+    final d = _normalizeDomain(domain);
+    if (d.isEmpty) return;
+
+    final data = await load();
+    final list = (data['domains'] is List) ? (data['domains'] as List) : <dynamic>[];
+    int idx = -1;
+    for (int i = 0; i < list.length; i++) {
+      final item = list[i];
+      if (item is Map && _normalizeDomain('${item['domain'] ?? ''}') == d) {
+        idx = i;
+        break;
+      }
+    }
+
+    final now = DateTime.now().toUtc().toIso8601String();
+    if (idx >= 0) {
+      final existing = (list[idx] is Map) ? (list[idx] as Map).cast<String, dynamic>() : <String, dynamic>{};
+      final uses = (existing['uses'] is num) ? (existing['uses'] as num).toInt() : int.tryParse('${existing['uses']}') ?? 0;
+      list[idx] = {
+        ...existing,
+        'domain': d,
+        'uses': uses + bump,
+        'lastUsedAtUtc': now,
+        'updatedAtUtc': now,
+      };
+    } else {
+      list.insert(0, {
+        'domain': d,
+        'trust': 0.5,
+        'notes': 'Observed from web results',
+        'uses': bump,
+        'createdAtUtc': now,
+        'updatedAtUtc': now,
+        'lastUsedAtUtc': now,
+      });
+    }
+
+    data['domains'] = list;
+    data['generatedAtUtc'] = now;
+    await save(data);
+  }
+
+  static Future<Set<String>> trustedDomains({double minTrust = 0.75}) async {
+    final data = await load();
+    final list = (data['domains'] is List) ? (data['domains'] as List) : const [];
+    final out = <String>{};
+    for (final e in list) {
+      if (e is! Map) continue;
+      final m = e.cast<String, dynamic>();
+      final trust = (m['trust'] is num) ? (m['trust'] as num).toDouble() : double.tryParse('${m['trust']}') ?? 0.0;
+      if (trust < minTrust) continue;
+      final dom = _normalizeDomain('${m['domain'] ?? ''}');
+      if (dom.isNotEmpty) out.add(dom);
+    }
+    return out;
+  }
+
+  static Map<String, dynamic> _prune(Map<String, dynamic> data) {
+    // Domains: keep most-used, then most-recent.
+    final domains = (data['domains'] is List) ? [...(data['domains'] as List)] : <dynamic>[];
+    domains.sort((a, b) {
+      if (a is! Map || b is! Map) return 0;
+      final am = a.cast<String, dynamic>();
+      final bm = b.cast<String, dynamic>();
+      final au = (am['uses'] is num) ? (am['uses'] as num).toInt() : int.tryParse('${am['uses']}') ?? 0;
+      final bu = (bm['uses'] is num) ? (bm['uses'] as num).toInt() : int.tryParse('${bm['uses']}') ?? 0;
+      if (au != bu) return bu.compareTo(au);
+      final al = (am['lastUsedAtUtc'] ?? am['updatedAtUtc'] ?? am['createdAtUtc'] ?? '').toString();
+      final bl = (bm['lastUsedAtUtc'] ?? bm['updatedAtUtc'] ?? bm['createdAtUtc'] ?? '').toString();
+      return bl.compareTo(al);
+    });
+    if (domains.length > maxDomains) domains.removeRange(maxDomains, domains.length);
+    data['domains'] = domains;
+
+    // Events: keep most-recent.
+    final events = (data['events'] is List) ? [...(data['events'] as List)] : <dynamic>[];
+    events.sort((a, b) {
+      if (a is! Map || b is! Map) return 0;
+      final am = a.cast<String, dynamic>();
+      final bm = b.cast<String, dynamic>();
+      final al = (am['updatedAtUtc'] ?? am['createdAtUtc'] ?? '').toString();
+      final bl = (bm['updatedAtUtc'] ?? bm['createdAtUtc'] ?? '').toString();
+      return bl.compareTo(al);
+    });
+    if (events.length > maxEvents) events.removeRange(maxEvents, events.length);
+    data['events'] = events;
+
+    return data;
+  }
+
+  static String _normalizeDomain(String d) {
+    var s = d.trim().toLowerCase();
+    if (s.startsWith('http://')) s = s.substring(7);
+    if (s.startsWith('https://')) s = s.substring(8);
+    if (s.startsWith('www.')) s = s.substring(4);
+    final slash = s.indexOf('/');
+    if (slash >= 0) s = s.substring(0, slash);
+    return s;
   }
 }
 

@@ -3,6 +3,8 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  connectivity_plus
+  firebase_core
   record_windows
   speech_to_text_windows
   sqlite3_flutter_libs

@@ -18,6 +18,13 @@ dependencies:
   url_launcher: ^6.3.0
   sqlite3: ^2.4.0
   sqlite3_flutter_libs: ^0.5.24
+  fl_chart: ^1.1.1
+  flutter_svg: ^2.2.3
+  firebase_core: ^4.4.0
+  connectivity_plus: ^7.0.0
+  flutter_bloc: ^9.1.1
+  firebase_messaging: ^16.1.1
+  riverpod: ^3.2.1
 
 dev_dependencies:
   flutter_test:
