@@ -1,3 +1,4 @@
+import '../profile/user_profile_store.dart';
 import 'router.dart';
 import 'shaper.dart';
 import 'twin_event.dart';
@@ -41,6 +42,9 @@ class TwinPlusKernel {
     explainer = TwinExplainer(prefs: prefs);
 
     await ledger.append(TwinEvent.appStarted());
+    await UserProfileStore.ensureSeeded();
+    observe(TwinEvent.actionPerformed(surface: 'profile', actor: TwinActor.system, action: 'user_profile_seeded'));
+
     _ready = true;
   }
 

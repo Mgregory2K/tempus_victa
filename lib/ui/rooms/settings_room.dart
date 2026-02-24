@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme_controller.dart';
+import '../../core/usage_stats_ingestor.dart';
+import '../../core/notification_ingestor.dart';
+import '../../core/device_signals_service.dart';
 import '../../services/ai/ai_settings_store.dart';
 import '../../services/ai/openai_client.dart';
 import '../room_frame.dart';
@@ -203,6 +206,70 @@ class _SettingsRoomState extends State<SettingsRoom> {
               ],
             ),
           ),
+          const SizedBox(height: 24),
+
+          // Device-wide signals (opt-in)
+          Text(
+            'Device-wide signals (opt-in)',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          const Text('Optional. Requires separate Android grants. All local.'),
+          const SizedBox(height: 10),
+          Card(
+            child: Column(
+              children: [
+                FutureBuilder<bool>(
+                  future: DeviceSignalsService.instance.isEnabled(),
+                  builder: (context, snap) {
+                    final enabled = snap.data ?? false;
+                    return SwitchListTile(
+                      title: const Text('Enable device-wide learning'),
+                      subtitle: const Text('Ingest notifications + app usage (if granted).'),
+                      value: enabled,
+                      onChanged: (v) async {
+                        await DeviceSignalsService.instance.setEnabled(v);
+                        if (mounted) setState(() {});
+                      },
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                FutureBuilder<bool>(
+                  future: NotificationIngestor.isNotificationAccessEnabled(),
+                  builder: (context, snap) {
+                    final ok = snap.data ?? false;
+                    return ListTile(
+                      leading: const Icon(Icons.notifications_active_rounded),
+                      title: const Text('Notification access'),
+                      subtitle: Text(ok ? 'Granted' : 'Not granted'),
+                      trailing: TextButton(
+                        onPressed: () => NotificationIngestor.openNotificationAccessSettings(),
+                        child: const Text('Open'),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                FutureBuilder<bool>(
+                  future: UsageStatsIngestor.isUsageAccessEnabled(),
+                  builder: (context, snap) {
+                    final ok = snap.data ?? false;
+                    return ListTile(
+                      leading: const Icon(Icons.query_stats_rounded),
+                      title: const Text('Usage access'),
+                      subtitle: Text(ok ? 'Granted' : 'Not granted'),
+                      trailing: TextButton(
+                        onPressed: () => UsageStatsIngestor.openUsageAccessSettings(),
+                        child: const Text('Open'),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+
           const SizedBox(height: 24),
 
           // AI (Opt-in)

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../core/app_state.dart';
+import '../core/device_signals_service.dart';
+import '../core/twin_plus/twin_plus_kernel.dart';
+
 import '../core/app_state_scope.dart';
 import '../core/module_def.dart';
 import '../core/module_order_store.dart';
@@ -28,6 +31,7 @@ class _RootShellState extends State<RootShell> {
   @override
   void initState() {
     super.initState();
+    DeviceSignalsService.instance.start(kernel: TwinPlusKernel.instance);
     _modules = ModuleRegistry.defaultModules();
     _appState = AppState(
       selectedModuleId: _selectedModuleId,

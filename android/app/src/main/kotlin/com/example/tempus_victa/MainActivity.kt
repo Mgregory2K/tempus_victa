@@ -2,6 +2,10 @@ package com.example.tempus_victa
 
 import android.content.Context
 import android.content.Intent
+import android.os.Process
+import android.app.usage.UsageStatsManager
+import android.app.usage.UsageEvents
+import android.app.AppOpsManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.annotation.NonNull
@@ -86,4 +90,57 @@ class MainActivity: FlutterActivity() {
             false
         }
     }
+
+    private fun isUsageAccessEnabled(): Boolean {
+        return try {
+            val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+            val mode = appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                packageName
+            )
+            mode == AppOpsManager.MODE_ALLOWED
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun openUsageAccessSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (e: Exception) {
+            // ignore
+        }
+    }
+
+    private fun fetchUsageEvents(sinceEpochMs: Long, maxEvents: Int): List<Map<String, Any?>> {
+        val out = ArrayList<Map<String, Any?>>()
+        if (!isUsageAccessEnabled()) return out
+
+        val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val now = System.currentTimeMillis()
+        val events = usm.queryEvents(sinceEpochMs, now)
+        val e = UsageEvents.Event()
+
+        var n = 0
+        while (events.hasNextEvent() && n < maxEvents) {
+            events.getNextEvent(e)
+            val pkg = e.packageName ?: ""
+            if (pkg.isNotEmpty()) {
+                out.add(
+                    mapOf(
+                        "packageName" to pkg,
+                        "eventType" to e.eventType,
+                        "tsMs" to e.timeStamp,
+                        "className" to e.className
+                    )
+                )
+                n++
+            }
+        }
+        return out
+    }
+
 }
