@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 
 import 'core/app_settings_store.dart';
 import 'core/app_theme_controller.dart';
+import 'core/twin_plus/twin_plus_kernel.dart';
+import 'core/twin_plus/twin_plus_scope.dart';
 import 'ui/root_shell.dart';
 import 'ui/theme/tempus_theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await TwinPlusKernel.instance.init();
   runApp(const TempusApp());
 }
 
@@ -80,7 +84,7 @@ class _TempusAppState extends State<TempusApp> {
       home: AppThemeController(
         themeMode: _themeMode,
         setThemeMode: _setThemeMode,
-        child: const RootShell(),
+        child: TwinPlusScope(kernel: TwinPlusKernel.instance, child: const RootShell()),
       ),
     );
   }

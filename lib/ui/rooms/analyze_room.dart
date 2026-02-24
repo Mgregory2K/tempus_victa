@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/learning_store.dart';
+import '../../core/twin_plus/twin_plus_kernel.dart';
+import '../../core/twin_plus/twin_plus_scope.dart';
 import '../room_frame.dart';
 import '../theme/tempus_theme.dart';
 import '../theme/tempus_ui.dart';
@@ -144,6 +146,8 @@ class _AnalyzeRoomState extends State<AnalyzeRoom> {
                             ),
                           ),
                         )),
+                  const SizedBox(height: 18),
+                  _twinInspector(context),
                 ],
               ),
             ),
@@ -271,6 +275,74 @@ class _AnalyzeRoomState extends State<AnalyzeRoom> {
       default:
         return 'Suggestion for ${s.source}';
     }
+  }
+
+  Widget _twinInspector(BuildContext context) {
+    final b = context.tv;
+    final t = Theme.of(context).textTheme;
+    final kernel = TwinPlusScope.of(context);
+
+    // If Twin+ hasn't been initialized yet, still render a helpful card.
+    if (!kernel.isReady) {
+      return TempusCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Twin+ Inspector', style: t.titleMedium),
+            const SizedBox(height: 6),
+            Text('Twin+ not initialized yet. (This should only happen very early in app startup.)', style: t.bodyMedium?.copyWith(color: b.muted)),
+          ],
+        ),
+      );
+    }
+
+    final snap = kernel.snapshot();
+    final prefs = snap.prefs;
+    final features = snap.features;
+
+    String _s(dynamic v) => (v == null) ? '—' : v.toString();
+
+    return TempusCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.person_search_rounded, color: b.accent),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Twin+ Inspector', style: t.titleMedium)),
+              Text('${snap.recentEvents.length} ev', style: t.bodySmall?.copyWith(color: b.muted)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              TempusPill(text: 'AI Opt‑In: ${_s(prefs['aiOptIn'])}'),
+              TempusPill(text: 'Just the facts: ${_s(prefs['justTheFactsActive'])}'),
+              TempusPill(text: 'Length: ${_s(prefs['lengthDefault'])}'),
+              TempusPill(text: 'Format: ${_s(prefs['formatDefault'])}'),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text('Style Features', style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              TempusPill(text: 'Samples: ${_s(features['samples'])}'),
+              TempusPill(text: 'Avg words: ${_s(features['avgWords'])}'),
+              TempusPill(text: 'Caps rate: ${_s(features['capsRate'])}'),
+              TempusPill(text: 'Profanity: ${_s(features['profanityRate'])}'),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text('Note: Twin+ is local, inspectable, and resettable. AI never becomes the memory.', style: t.bodySmall?.copyWith(color: b.muted)),
+        ],
+      ),
+    );
   }
 }
 

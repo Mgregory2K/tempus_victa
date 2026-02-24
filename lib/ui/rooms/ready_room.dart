@@ -8,6 +8,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/metrics_store.dart';
 import '../../core/ready_room_store.dart';
+import '../../core/twin_plus/router.dart';
+import '../../core/twin_plus/shaper.dart';
+import '../../core/twin_plus/twin_plus_scope.dart';
+import '../../core/twin_plus/twin_event.dart';
 import '../../services/ai/ai_settings_store.dart';
 import '../../services/ai/openai_client.dart';
 import '../theme/tv_textfield.dart';
@@ -24,6 +28,7 @@ class _ReadyRoomState extends State<ReadyRoom> {
   final _ctrl = TextEditingController();
   final _scroll = ScrollController();
   bool _busy = false;
+  String? _lastDecisionId;
 
   List<ReadyRoomMessage> _msgs = [];
 
@@ -265,38 +270,73 @@ class _ReadyRoomState extends State<ReadyRoom> {
 
     await _append('user', text);
 
+    final kernel = TwinPlusScope.of(context);
+
     try {
       final aiEnabled = await AiSettingsStore.isEnabled();
       final apiKey = await AiSettingsStore.getApiKey();
-      String reply;
 
+      // Sync Twin+ fast preference mirror (routing must respect opt-in)
+      await kernel.prefs.setAiOptIn(aiEnabled && apiKey != null && apiKey.trim().isNotEmpty);
+
+      final justFactsSignal = text.toLowerCase().startsWith('just the facts');
+      // Runtime signal for this interaction (does not require AI)
+      if (justFactsSignal) {
+        await kernel.prefs.setJustTheFacts(true);
+      }
+
+      // Minimal intent: Ready Room is generally planning/synthesis unless you explicitly treat it as app-howto elsewhere.
+      final intent = QueryIntent(
+        surface: 'ready_room',
+        queryText: text,
+        taskType: TaskType.planning,
+        timeHorizon: 'today',
+        needsVerifiableFacts: false,
+      );
+
+      final plan = kernel.route(intent);
+      _lastDecisionId = plan.decisionId;
+
+      String reply;
       if (_protocolActive) {
         reply = await _protocolRespond(
           input: text,
-          aiEnabled: aiEnabled,
+          aiEnabled: aiEnabled && plan.aiAllowed,
           apiKey: apiKey,
+          maxOutputTokens: plan.budgetTokensMax,
         );
       } else {
         reply = await _normalRespond(
           input: text,
-          aiEnabled: aiEnabled,
+          aiEnabled: aiEnabled && plan.aiAllowed,
           apiKey: apiKey,
+          maxOutputTokens: plan.budgetTokensMax,
         );
       }
 
-      await _append('assistant', reply);
+      final shaped = kernel.shape(
+        OutputIntent(
+          surface: 'ready_room',
+          purpose: _protocolActive ? 'plan' : 'inform',
+          draftText: reply,
+          constraints: justFactsSignal ? const ['Just the facts'] : const <String>[],
+        ),
+      );
+
+      await _append('assistant', shaped.text);
       _jumpBottom();
-    } catch (_) {
-      await _append('assistant', 'I couldn’t complete that request right now.');
+    } catch (e) {
+      await _append('assistant', 'Error: $e');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (!mounted) return;
+      setState(() => _busy = false);
     }
   }
 
-  Future<String> _normalRespond({required String input, required bool aiEnabled, required String? apiKey}) async {
+  Future<String> _normalRespond({required String input, required bool aiEnabled, required String? apiKey, int maxOutputTokens = 600}) async {
     if (aiEnabled && apiKey != null && apiKey.isNotEmpty) {
       final model = await AiSettingsStore.getModel() ?? 'gpt-4o-mini';
-      final out = await OpenAiClient(apiKey: apiKey, model: model).respondText(input: input);
+      final out = await OpenAiClient(apiKey: apiKey, model: model).respondText(input: input, maxOutputTokens: maxOutputTokens);
       await MetricsStore.inc(TvMetrics.aiCalls);
       return out.text;
     }
@@ -305,13 +345,13 @@ class _ReadyRoomState extends State<ReadyRoom> {
     return _webFallback(input);
   }
 
-  Future<String> _protocolRespond({required String input, required bool aiEnabled, required String? apiKey}) async {
+  Future<String> _protocolRespond({required String input, required bool aiEnabled, required String? apiKey, int maxOutputTokens = 600}) async {
     final cfg = _protocolConfig ?? ProtocolConfig.defaultConfig();
 
     if (aiEnabled && apiKey != null && apiKey.isNotEmpty) {
       final model = await AiSettingsStore.getModel() ?? 'gpt-4o-mini';
       final prompt = _buildProtocolPrompt(cfg, input);
-      final out = await OpenAiClient(apiKey: apiKey, model: model).respondText(input: prompt);
+      final out = await OpenAiClient(apiKey: apiKey, model: model).respondText(input: prompt, maxOutputTokens: maxOutputTokens);
       await MetricsStore.inc(TvMetrics.aiCalls);
       return out.text;
     }
@@ -371,7 +411,40 @@ class _ReadyRoomState extends State<ReadyRoom> {
     return 'Here are some results you can open:\n\n• $ddg\n• $google';
   }
 
-  void _jumpBottom() {
+  
+  Future<void> _feedback(String kind) async {
+    final kernel = TwinPlusScope.of(context);
+    kernel.observe(TwinEvent.feedbackGiven(surface: 'ready_room', feedback: kind, decisionId: _lastDecisionId));
+
+    // Reinforcement updates (local, deterministic)
+    final k = kind.toLowerCase();
+    if (k.contains('too long')) {
+      await kernel.prefs.reinforceVerboseComplaint();
+    } else if (k.contains('wrong source') || k.contains('stale')) {
+      await kernel.prefs.reinforceStaleComplaint();
+    } else if (k.contains('stop asking')) {
+      await kernel.prefs.reinforceClarificationComplaint();
+    } else if (k.contains('just the facts')) {
+      // Treat as a runtime signal; we keep it on until user turns it off.
+      await kernel.prefs.setJustTheFacts(true);
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Twin+ noted: $kind'), duration: const Duration(milliseconds: 850)),
+    );
+  }
+
+  Future<void> _toggleJustFactsOff() async {
+    final kernel = TwinPlusScope.of(context);
+    await kernel.prefs.setJustTheFacts(false);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Just the facts… OFF'), duration: Duration(milliseconds: 850)),
+    );
+  }
+
+void _jumpBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
       _scroll.animateTo(
@@ -445,21 +518,45 @@ class _ReadyRoomState extends State<ReadyRoom> {
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: TvTextField(
-                    controller: _ctrl,
-                    hintText: _protocolActive ? 'Protocol input…' : 'Ask anything…',
-                    onSubmitted: (_) => _send(),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TvTextField(
+                        controller: _ctrl,
+                        hintText: _protocolActive ? 'Protocol input…' : 'Ask anything…',
+                        onSubmitted: (_) => _send(),
+                        twinSurface: 'ready_room',
+                        twinFieldId: 'input',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: _busy ? null : _send,
+                      icon: _busy
+                          ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.send),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _busy ? null : _send,
-                  icon: _busy
-                      ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.send),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      const Text('Twin+ quick feedback:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      ActionChip(label: const Text('Too long'), onPressed: () => _feedback('Too long')),
+                      ActionChip(label: const Text('Wrong source / stale'), onPressed: () => _feedback('Wrong source / stale')),
+                      ActionChip(label: const Text('Stop asking questions'), onPressed: () => _feedback('Stop asking questions')),
+                      ActionChip(label: const Text('Just the facts… ON'), onPressed: () => _feedback('Just the facts')),
+                      ActionChip(label: const Text('Just the facts… OFF'), onPressed: _toggleJustFactsOff),
+                    ],
+                  ),
                 ),
               ],
             ),
