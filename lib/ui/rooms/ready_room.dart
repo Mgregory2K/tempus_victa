@@ -718,8 +718,59 @@ class _ReadyRoomState extends State<ReadyRoom> {
         surface: 'ready_room',
         feedback: nextVote == 1 ? 'upvote' : nextVote == -1 ? 'downvote' : 'vote_cleared',
         decisionId: _lastDecisionId,
+        responseId: msgId,
       ),
     );
+
+    // During early learning, collect a subtle "why" when a downvote is given.
+    if (nextVote == -1) {
+      await _maybeCollectDownvoteDetails(msgId: msgId);
+    }
+  }
+
+  Future<void> _maybeCollectDownvoteDetails({required String msgId}) async {
+    if (!mounted) return;
+
+    final kernel = TwinPlusScope.of(context);
+    final threshold = kernel.prefs.downvoteDetailThreshold;
+    final count = kernel.prefs.downvoteDetailCount;
+    if (threshold <= 0) return;
+    if (count >= threshold) return;
+
+    // We count showing the prompt (not the selection) so it naturally phases out.
+    await kernel.prefs.incDownvoteDetailCount();
+
+    final res = await showModalBottomSheet<_DownvoteDetailsResult>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => const _DownvoteDetailsSheet(),
+    );
+    if (res == null) return;
+
+    final reason = res.reason.trim();
+    final details = res.details.trim();
+    final clipped = details.length > 140 ? details.substring(0, 140) : details;
+    final summary = clipped.isEmpty ? reason : '$reason — $clipped';
+
+    kernel.observe(
+      TwinEvent.feedbackGiven(
+        surface: 'ready_room',
+        feedback: 'downvote_details:$summary',
+        decisionId: _lastDecisionId,
+        responseId: msgId,
+      ),
+    );
+
+    // Reinforcement updates (local, deterministic)
+    final k = reason.toLowerCase();
+    if (k.contains('too long')) {
+      await kernel.prefs.reinforceVerboseComplaint();
+    } else if (k.contains('wrong source') || k.contains('stale')) {
+      await kernel.prefs.reinforceStaleComplaint();
+    } else if (k.contains('stop asking')) {
+      await kernel.prefs.reinforceClarificationComplaint();
+    }
   }
 
   Future<void> _toggleWrongSource(String msgId) async {
@@ -1248,4 +1299,100 @@ class _WebBundle {
   final String forUser;
   final String forPrompt;
   const _WebBundle({required this.forUser, required this.forPrompt});
+}
+
+class _DownvoteDetailsResult {
+  final String reason;
+  final String details;
+  const _DownvoteDetailsResult({required this.reason, required this.details});
+}
+
+class _DownvoteDetailsSheet extends StatefulWidget {
+  const _DownvoteDetailsSheet();
+
+  @override
+  State<_DownvoteDetailsSheet> createState() => _DownvoteDetailsSheetState();
+}
+
+class _DownvoteDetailsSheetState extends State<_DownvoteDetailsSheet> {
+  String _reason = 'Wrong source / stale';
+  final _detailsCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _detailsCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 12,
+          right: 12,
+          top: 12,
+          bottom: 12 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Quick feedback', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+            const SizedBox(height: 10),
+            _radio('Wrong source / stale'),
+            _radio('Too long'),
+            _radio('Stop asking questions'),
+            _radio('Other'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _detailsCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Optional details',
+                hintText: 'One sentence is plenty…',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.of(context).pop(
+                        _DownvoteDetailsResult(
+                          reason: _reason,
+                          details: _detailsCtrl.text,
+                        ),
+                      );
+                    },
+                    child: const Text('Save'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _radio(String label) {
+    return RadioListTile<String>(
+      value: label,
+      groupValue: _reason,
+      onChanged: (v) => setState(() => _reason = v ?? _reason),
+      title: Text(label),
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+    );
+  }
 }

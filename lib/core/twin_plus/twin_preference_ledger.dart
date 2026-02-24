@@ -8,6 +8,9 @@ class TwinPreferenceLedger {
   final File _file;
   Map<String, dynamic> _state;
 
+  static const String _kDownvoteDetailThreshold = 'downvoteDetailThreshold';
+  static const String _kDownvoteDetailCount = 'downvoteDetailCount';
+
   TwinPreferenceLedger._(this._file, this._state);
 
   static Future<TwinPreferenceLedger> open() async {
@@ -40,6 +43,8 @@ class TwinPreferenceLedger {
         'justTheFactsActive': false,
         'dailyTokenCap': 15000,
         'aiOptIn': false, // mirrors AiSettingsStore but gives Twin+ a fast read
+        _kDownvoteDetailThreshold: 25,
+        _kDownvoteDetailCount: 0,
       };
 
   Future<void> persist() async {
@@ -53,6 +58,17 @@ class TwinPreferenceLedger {
   String get formatDefault => (_state['formatDefault'] ?? 'bullets').toString();
 
   bool get justTheFactsActive => (_state['justTheFactsActive'] ?? false) == true;
+
+  /// How many times we should prompt for downvote details ("Wrong source", etc.)
+  /// before switching to plain thumbs-only behavior.
+  int get downvoteDetailThreshold => (_state[_kDownvoteDetailThreshold] is int)
+      ? (_state[_kDownvoteDetailThreshold] as int)
+      : int.tryParse('${_state[_kDownvoteDetailThreshold]}') ?? 25;
+
+  /// Count of how many times we have shown the downvote-details prompt.
+  int get downvoteDetailCount => (_state[_kDownvoteDetailCount] is int)
+      ? (_state[_kDownvoteDetailCount] as int)
+      : int.tryParse('${_state[_kDownvoteDetailCount]}') ?? 0;
 
   double get hatesVerbose => _asDouble(_state['hatesVerbose']);
   double get hatesClarifyingQuestions => _asDouble(_state['hatesClarifyingQuestions']);
@@ -69,6 +85,16 @@ class TwinPreferenceLedger {
 
   Future<void> setJustTheFacts(bool v) async {
     _state['justTheFactsActive'] = v;
+    await persist();
+  }
+
+  Future<void> setDownvoteDetailThreshold(int v) async {
+    _state[_kDownvoteDetailThreshold] = v < 0 ? 0 : v;
+    await persist();
+  }
+
+  Future<void> incDownvoteDetailCount() async {
+    _state[_kDownvoteDetailCount] = downvoteDetailCount + 1;
     await persist();
   }
 

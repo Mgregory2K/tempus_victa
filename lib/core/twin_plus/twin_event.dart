@@ -163,6 +163,7 @@ class TwinEvent {
     required String feedback,
     String? responseId,
     String? decisionId,
+    String? details,
   }) =>
       TwinEvent(
         id: _id(),
@@ -174,6 +175,7 @@ class TwinEvent {
           'feedback': feedback,
           if (responseId != null) 'responseId': responseId,
           if (decisionId != null) 'decisionId': decisionId,
+          if (details != null && details.trim().isNotEmpty) 'details': details.trim(),
         },
       );
 
