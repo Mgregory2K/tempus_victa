@@ -16,6 +16,7 @@ enum TwinEventType {
   sourceUsed,
   feedbackGiven,
   outputShaped,
+  actionPerformed,
 }
 
 enum TwinActor { user, system }
@@ -175,6 +176,33 @@ class TwinEvent {
           if (decisionId != null) 'decisionId': decisionId,
         },
       );
+
+  static TwinEvent actionPerformed({
+    required String surface,
+    required String action,
+    TwinActor actor = TwinActor.user,
+    String? entityType,
+    String? entityId,
+    Map<String, dynamic>? meta,
+    double confidence = 1.0,
+    TwinPrivacy privacy = TwinPrivacy.normal,
+  }) {
+    return TwinEvent(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      tsUtc: DateTime.now().toUtc(),
+      actor: actor,
+      type: TwinEventType.actionPerformed,
+      surface: surface,
+      confidence: confidence,
+      privacy: privacy,
+      payload: {
+        'action': action,
+        if (entityType != null) 'entityType': entityType,
+        if (entityId != null) 'entityId': entityId,
+        if (meta != null) 'meta': meta,
+      },
+    );
+  }
 
   static String _id() => DateTime.now().microsecondsSinceEpoch.toString();
 }

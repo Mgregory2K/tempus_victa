@@ -10,6 +10,8 @@ import '../../core/recycle_bin_store.dart';
 import '../../core/task_item.dart';
 import '../../core/task_store.dart';
 import '../../core/metrics_store.dart';
+import '../../core/twin_plus/twin_plus_scope.dart';
+import '../../core/twin_plus/twin_event.dart';
 import '../room_frame.dart';
 
 class TasksRoom extends StatefulWidget {
@@ -60,6 +62,10 @@ class _TasksRoomState extends State<TasksRoom> {
 
     await MetricsStore.inc(TvMetrics.tasksCreatedManual);
 
+    // Twin+ explicit action signal (local, inspectable)
+    final kernel = TwinPlusScope.of(context);
+    kernel.observe(TwinEvent.actionPerformed(surface: 'tasks', action: 'task_created', entityType: 'task', entityId: t.id));
+
     if (!mounted) return;
     AppStateScope.of(context).bumpTasksVersion();
   }
@@ -104,6 +110,10 @@ class _TasksRoomState extends State<TasksRoom> {
     // Add to recycle bin (tasks)
     final bin = await RecycleBinStore.loadTasks();
     await RecycleBinStore.saveTasks([task, ...bin]);
+
+    if (!mounted) return;
+    // Twin+
+    TwinPlusScope.of(context).observe(TwinEvent.actionPerformed(surface: 'tasks', action: 'task_renamed', entityType: 'task', entityId: task.id));
 
     if (!mounted) return;
     AppStateScope.of(context).bumpTasksVersion();
