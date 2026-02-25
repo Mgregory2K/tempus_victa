@@ -18,6 +18,8 @@ import '../../services/ai/ai_settings_store.dart';
 import '../../services/ai/openai_client.dart';
 import '../../services/web/web_search_client.dart';
 import '../theme/tv_textfield.dart';
+import '../../core/app_settings_store.dart';
+import '../widgets/dev_trace_panel.dart';
 
 class ReadyRoom extends StatefulWidget {
   final String? roomName;
@@ -32,6 +34,9 @@ class _ReadyRoomState extends State<ReadyRoom> {
   final _scroll = ScrollController();
   bool _busy = false;
   String? _lastDecisionId;
+
+  bool _devMode = false;
+  List<String> _devTrace = const [];
 
   List<ReadyRoomMessage> _msgs = [];
 
@@ -91,6 +96,7 @@ class _ReadyRoomState extends State<ReadyRoom> {
   @override
   void initState() {
     super.initState();
+    _loadDevMode();
     _load();
   }
 
@@ -100,6 +106,22 @@ class _ReadyRoomState extends State<ReadyRoom> {
     _scroll.dispose();
     super.dispose();
   }
+
+  Future<void> _loadDevMode() async {
+    final v = await AppSettingsStore().loadDevMode();
+    if (!mounted) return;
+    setState(() => _devMode = v);
+  }
+
+  Future<void> _toggleDevMode() async {
+    final next = await AppSettingsStore().toggleDevMode();
+    if (!mounted) return;
+    setState(() => _devMode = next);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(next ? 'Dev Mode enabled' : 'Dev Mode disabled')),
+    );
+  }
+
 
   Future<void> _load() async {
     final loaded = await ReadyRoomStore.load();
@@ -367,6 +389,19 @@ class _ReadyRoomState extends State<ReadyRoom> {
 
       final plan = kernel.route(intent);
       _lastDecisionId = plan.decisionId;
+      if (_devMode) {
+        setState(() {
+          _devTrace = <String>[
+            'surface=ready_room',
+            'decisionId=${plan.decisionId}',
+            'timeW=${plan.timeSensitivityW.toStringAsFixed(1)}',
+            'verW=${plan.verifiabilityW.toStringAsFixed(1)}',
+            'strategy=${plan.strategy}',
+            'aiAllowed=${plan.aiAllowed}',
+            'aiProvider=${plan.aiProvider}',
+          ];
+        });
+      }
 
       String reply;
       if (_protocolActive) {
@@ -856,9 +891,12 @@ void _jumpBottom() {
             child: Row(
               children: [
                 const SizedBox(width: 12),
-                Text(
-                  _protocolActive ? 'Ready Room — Protocol Active' : 'Ready Room',
-                  style: const TextStyle(fontWeight: FontWeight.w900),
+                GestureDetector(
+                  onLongPress: _toggleDevMode,
+                  child: Text(
+                    _protocolActive ? 'Ready Room — Protocol Active' : 'Ready Room',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
                 ),
                 const Spacer(),
                 if (!_protocolActive)
@@ -893,6 +931,7 @@ void _jumpBottom() {
             ),
           ),
           const Divider(height: 1),
+          if (_devMode) DevTracePanel(lines: _devTrace),
           Expanded(
             child: ListView.builder(
               controller: _scroll,

@@ -12,6 +12,7 @@ import '../../core/task_store.dart';
 import '../room_frame.dart';
 import '../theme/tempus_ui.dart';
 import '../widgets/signal_detail_sheet.dart';
+import '../../core/app_settings_store.dart';
 
 class SignalBayRoom extends StatefulWidget {
   final String roomName;
@@ -22,6 +23,8 @@ class SignalBayRoom extends StatefulWidget {
 }
 
 class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserver {
+  bool _devMode = false;
+  final AppSettingsStore _appSettings = AppSettingsStore();
   List<SignalItem> _signals = const [];
   bool _loading = true;
 
@@ -30,6 +33,7 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
   @override
   void initState() {
     super.initState();
+    _loadDevMode();
     WidgetsBinding.instance.addObserver(this);
     _load();
   }
@@ -45,6 +49,12 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     if (state == AppLifecycleState.resumed) {
       _pullNativeSignals();
     }
+  }
+
+  Future<void> _loadDevMode() async {
+    final v = await _appSettings.loadDevMode();
+    if (!mounted) return;
+    setState(() => _devMode = v);
   }
 
   Future<void> _load() async {
@@ -153,7 +163,7 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     final bin = await RecycleBinStore.loadSignals();
     await RecycleBinStore.saveSignals([s, ...bin]);
 
-    setState(() => _signals = _signals.where((x) => x.id != s.id).toList(growable: false));
+    setState(() => _signals = _signals.where((x) => x.fingerprint != s.fingerprint).toList(growable: false));
     await _persist();
   }
 

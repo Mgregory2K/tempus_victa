@@ -158,6 +158,50 @@ class TwinEvent {
         privacy: TwinPrivacy.normal,
       );
 
+  static TwinEvent routeChosen({
+    required String surface,
+    required String decisionId,
+    required String strategy,
+    required double verifiabilityW,
+    required double timeSensitivityW,
+    required bool aiAllowed,
+    required String provider,
+  }) =>
+      TwinEvent(
+        id: _id(),
+        tsUtc: DateTime.now().toUtc(),
+        surface: surface,
+        type: TwinEventType.routeChosen,
+        actor: TwinActor.system,
+        payload: {
+          'decisionId': decisionId,
+          'strategy': strategy,
+          'verifiabilityW': verifiabilityW,
+          'timeSensitivityW': timeSensitivityW,
+          'aiAllowed': aiAllowed,
+          'provider': provider,
+        },
+      );
+
+  static TwinEvent sourceUsed({
+    required String surface,
+    required String decisionId,
+    required String source,
+    Map<String, dynamic>? meta,
+  }) =>
+      TwinEvent(
+        id: _id(),
+        tsUtc: DateTime.now().toUtc(),
+        surface: surface,
+        type: TwinEventType.sourceUsed,
+        actor: TwinActor.system,
+        payload: {
+          'decisionId': decisionId,
+          'source': source,
+          if (meta != null) 'meta': meta,
+        },
+      );
+
   static TwinEvent feedbackGiven({
     required String surface,
     required String feedback,

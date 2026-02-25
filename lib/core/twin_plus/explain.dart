@@ -24,8 +24,13 @@ class TwinExplainer {
       if (prefs.hatesStaleInfo >= 0.35) 'hates_stale_info',
       if (prefs.justTheFactsActive) 'just_the_facts',
     ];
+
+    // Keep it numeric and incremental (0.0–1.0, 0.1 increments).
+    final ts = plan.timeSensitivityW.toStringAsFixed(1);
+    final ver = plan.verifiabilityW.toStringAsFixed(1);
+
     return TwinExplanation(
-      summary: 'Strategy: ${plan.strategy}, verifiability: ${plan.verifiability}, time: ${plan.timeSensitivity}',
+      summary: 'Strategy: ${plan.strategy}, verifiabilityW: $ver, timeW: $ts',
       reasons: reasons,
     );
   }

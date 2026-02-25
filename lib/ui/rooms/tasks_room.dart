@@ -14,6 +14,8 @@ import '../../core/twin_plus/twin_plus_scope.dart';
 import '../../core/twin_plus/twin_event.dart';
 import '../room_frame.dart';
 import '../theme/tv_textfield.dart';
+import '../../core/app_settings_store.dart';
+import '../widgets/dev_trace_panel.dart';
 
 class TasksRoom extends StatefulWidget {
   final String roomName;
@@ -25,6 +27,22 @@ class TasksRoom extends StatefulWidget {
 
 class _TasksRoomState extends State<TasksRoom> {
   Future<List<TaskItem>> _load() => TaskStore.load();
+
+  bool _devMode = false;
+  List<String> _devTrace = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDevMode();
+  }
+
+  Future<void> _loadDevMode() async {
+    final v = await AppSettingsStore().loadDevMode();
+    if (!mounted) return;
+    setState(() => _devMode = v);
+  }
+
 
   Future<void> _createManualTask() async {
     final controller = TextEditingController();
@@ -176,7 +194,11 @@ class _TasksRoomState extends State<TasksRoom> {
         onPressed: _createManualTask,
         child: const Icon(Icons.add),
       ),
-      child: FutureBuilder<List<TaskItem>>(
+      child: Column(
+        children: [
+          if (_devMode) DevTracePanel(lines: _devTrace),
+          Expanded(
+            child: FutureBuilder<List<TaskItem>>(
         future: _load(),
         builder: (context, snap) {
           final tasks = snap.data ?? const <TaskItem>[];
@@ -248,6 +270,9 @@ class _TasksRoomState extends State<TasksRoom> {
             },
           );
         },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -281,7 +306,7 @@ class _SwipeBg extends StatelessWidget {
             Text(label),
             const SizedBox(width: 8),
             Icon(icon),
-          ]
+          ],
         ],
       ),
     );
@@ -332,9 +357,10 @@ class _ProjectPickerSheetState extends State<_ProjectPickerSheet> {
                 IconButton(
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close_rounded),
-                )
+                ),
               ],
             ),
+            const SizedBox(height: 8),
             if (widget.projects.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
@@ -356,19 +382,20 @@ class _ProjectPickerSheetState extends State<_ProjectPickerSheet> {
                 ),
               ),
             const SizedBox(height: 8),
-            Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Or create new', style: TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 6),
-              TvTextField(
-                controller: _newController,
-                hintText: 'New project name',
-                twinSurface: 'tasks',
-                twinFieldId: 'new_project_name',
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Or create new',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 6),
+            TvTextField(
+              controller: _newController,
+              hintText: 'New project name',
+              twinSurface: 'tasks',
+              twinFieldId: 'new_project_name',
+            ),
             const SizedBox(height: 8),
             Row(
               children: [

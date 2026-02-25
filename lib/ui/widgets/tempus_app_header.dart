@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_settings_store.dart';
+
 /// Shared top header for rooms.
 ///
 /// Keeps the look consistent and provides an optional trailing widget for
@@ -24,6 +26,14 @@ class TempusAppHeader extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
+              child: GestureDetector(
+              onLongPress: () async {
+                final next = await AppSettingsStore().toggleDevMode();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Dev Mode: ${next ? 'ON' : 'OFF'}')),
+                );
+              },
               child: Text(
                 roomTitle,
                 maxLines: 1,
@@ -34,6 +44,7 @@ class TempusAppHeader extends StatelessWidget {
                   fontSize: 18,
                 ),
               ),
+            ),
             ),
             if (trailing != null) ...[
               const SizedBox(width: 8),

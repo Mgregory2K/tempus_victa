@@ -98,24 +98,73 @@ class TwinPreferenceLedger {
     await persist();
   }
 
+  
+  // Learning reinforcement is incremental and evidence-based.
+  // One complaint should NOT instantly become a "canonical forever" preference.
+  // We quantize preferences to 0.1 increments and only apply a bump after enough evidence.
+  static const int _kEvidencePerStep = 5; // 5 repeat events => +0.1
+
   Future<void> reinforceVerboseComplaint() async {
-    _state['hatesVerbose'] = _clamp01(hatesVerbose + 0.12);
+    await _bumpQuantizedPref(
+      prefKey: 'hatesVerbose',
+      evidenceKey: 'hatesVerboseEvidence',
+      step: 0.1,
+      evidencePerStep: _kEvidencePerStep,
+    );
+
+    // If the user repeatedly complains about verbosity, bias the default length shorter.
     if (hatesVerbose >= 0.35 && lengthDefault != 'short' && lengthDefault != 'tiny') {
       _state['lengthDefault'] = 'short';
+      await persist();
     }
-    await persist();
   }
 
   Future<void> reinforceStaleComplaint() async {
-    _state['hatesStaleInfo'] = _clamp01(hatesStaleInfo + 0.12);
-    await persist();
+    await _bumpQuantizedPref(
+      prefKey: 'hatesStaleInfo',
+      evidenceKey: 'hatesStaleInfoEvidence',
+      step: 0.1,
+      evidencePerStep: _kEvidencePerStep,
+    );
   }
 
   Future<void> reinforceClarificationComplaint() async {
-    _state['hatesClarifyingQuestions'] = _clamp01(hatesClarifyingQuestions + 0.12);
+    await _bumpQuantizedPref(
+      prefKey: 'hatesClarifyingQuestions',
+      evidenceKey: 'hatesClarifyingQuestionsEvidence',
+      step: 0.1,
+      evidencePerStep: _kEvidencePerStep,
+    );
+  }
+
+  Future<void> _bumpQuantizedPref({
+    required String prefKey,
+    required String evidenceKey,
+    required double step,
+    required int evidencePerStep,
+  }) async {
+    final curEvidence = _asInt(_state[evidenceKey]);
+    final nextEvidence = curEvidence + 1;
+    _state[evidenceKey] = nextEvidence;
+
+    // Only bump when the evidence threshold is hit.
+    if (nextEvidence % evidencePerStep != 0) {
+      await persist();
+      return;
+    }
+
+    final cur = _asDouble(_state[prefKey]);
+    final bumped = _quantize01(cur + step);
+    _state[prefKey] = bumped;
     await persist();
   }
 
-  static double _asDouble(dynamic v) => (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0;
+  static int _asInt(dynamic v) => (v is int) ? v : int.tryParse(v?.toString() ?? '') ?? 0;
+
+static double _asDouble(dynamic v) => (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0;
   static double _clamp01(double v) => v < 0 ? 0 : (v > 1 ? 1 : v);
+  static double _quantize01(double v) {
+    final c = _clamp01(v);
+    return (c * 10).round() / 10.0;
+  }
 }

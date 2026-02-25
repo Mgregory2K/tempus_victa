@@ -10,6 +10,8 @@ class TaskItem {
 
   final String? transcript;
 
+  final String? decisionId;
+
   final DateTime createdAt;
   final bool isCompleted;
 
@@ -22,6 +24,7 @@ class TaskItem {
     this.audioPath,
     this.audioDurationMs,
     this.transcript,
+    this.decisionId,
     this.isCompleted = false,
     this.projectId,
   });
@@ -32,6 +35,7 @@ class TaskItem {
     String? audioPath,
     int? audioDurationMs,
     String? transcript,
+    String? decisionId,
     DateTime? createdAt,
     bool? isCompleted,
     String? projectId,
@@ -42,6 +46,7 @@ class TaskItem {
       audioPath: audioPath ?? this.audioPath,
       audioDurationMs: audioDurationMs ?? this.audioDurationMs,
       transcript: transcript ?? this.transcript,
+      decisionId: decisionId ?? this.decisionId,
       createdAt: createdAt ?? this.createdAt,
       isCompleted: isCompleted ?? this.isCompleted,
       projectId: projectId ?? this.projectId,
@@ -54,6 +59,7 @@ class TaskItem {
         'audioPath': audioPath,
         'audioDurationMs': audioDurationMs,
         'transcript': transcript,
+        'decisionId': decisionId,
         'createdAtMs': createdAt.millisecondsSinceEpoch,
         'isCompleted': isCompleted,
         'projectId': projectId,
@@ -66,6 +72,7 @@ class TaskItem {
       audioPath: m['audioPath'] as String?,
       audioDurationMs: m['audioDurationMs'] is int ? m['audioDurationMs'] as int : int.tryParse('${m['audioDurationMs']}'),
       transcript: m['transcript'] as String?,
+      decisionId: m['decisionId'] as String?,
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         (m['createdAtMs'] is int) ? m['createdAtMs'] as int : int.tryParse('${m['createdAtMs']}') ?? DateTime.now().millisecondsSinceEpoch,
       ),

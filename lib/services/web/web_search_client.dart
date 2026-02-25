@@ -96,4 +96,20 @@ class WebSearchLink {
   final String titleOrSnippet;
   final String url;
   const WebSearchLink({required this.titleOrSnippet, required this.url});
+
+  /// Back-compat getters for DoctrineEngine.
+  String get title => titleOrSnippet;
+
+  /// DuckDuckGo Instant Answer API does not provide a separate snippet; use the same field.
+  String get snippet => titleOrSnippet;
+
+  /// Parsed host from the URL (best-effort).
+  String get domain {
+    try {
+      final u = Uri.parse(url);
+      return u.host;
+    } catch (_) {
+      return '';
+    }
+  }
 }

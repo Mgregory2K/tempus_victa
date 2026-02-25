@@ -101,7 +101,9 @@ class DeviceSignalsService with WidgetsBindingObserver {
       final pkg = (r['packageName'] ?? 'android').toString();
       final title = (r['title'] ?? '').toString().trim();
       final body = (r['body'] ?? '').toString().trim();
-      final fp = '$pkg|$title|$body';
+      final fp = body.isEmpty
+          ? '$pkg|$title|${(r['createdAtMs'] ?? now.millisecondsSinceEpoch)}'
+          : '$pkg|$title|$body';
 
       final prev = byFp[fp];
       if (prev == null) {

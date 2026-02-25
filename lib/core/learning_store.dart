@@ -60,6 +60,71 @@ class SuggestedRule {
       );
 }
 
+double _q01(double v) {
+  final clamped = v.clamp(0.0, 1.0);
+  return (clamped * 10.0).round() / 10.0;
+}
+
+
+class SourceLearningStats {
+  final String source;
+  final int total;
+  final int toTask;
+  final int toCorkboard;
+  final int recycled;
+  final int acked;
+
+  const SourceLearningStats({
+    required this.source,
+    required this.total,
+    required this.toTask,
+    required this.toCorkboard,
+    required this.recycled,
+    required this.acked,
+  });
+
+  int countFor(SignalActionType a) {
+    switch (a) {
+      case SignalActionType.toTask:
+        return toTask;
+      case SignalActionType.toCorkboard:
+        return toCorkboard;
+      case SignalActionType.recycled:
+        return recycled;
+      case SignalActionType.acked:
+        return acked;
+    }
+  }
+
+  /// Returns dominant action among {toTask,toCorkboard,recycled} (acked excluded).
+  SignalActionType dominantAction() {
+    final m = <SignalActionType, int>{
+      SignalActionType.toTask: toTask,
+      SignalActionType.toCorkboard: toCorkboard,
+      SignalActionType.recycled: recycled,
+    };
+    SignalActionType best = SignalActionType.toTask;
+    int bestV = -1;
+    m.forEach((k, v) {
+      if (v > bestV) {
+        bestV = v;
+        best = k;
+      }
+    });
+    return best;
+  }
+
+  double confidenceFor(SignalActionType a) {
+    if (total <= 0) return 0.0;
+    return _q01(countFor(a) / total);
+  }
+
+  /// Confidence of the dominant action (acked excluded).
+  double dominantConfidence() => confidenceFor(dominantAction());
+
+  bool meetsTrainingMinimum([int min = 25]) => total >= min;
+}
+
 class LearningStore {
   static const _fileName = 'learning_signals_v1.json';
 
@@ -123,7 +188,7 @@ class LearningStore {
 
   static List<SuggestedRule> suggest(List<LearnedSource> sources) {
     // Minimum samples before we act like we "learned" something.
-    const min = 6;
+    const min = 25;
     final out = <SuggestedRule>[];
 
     for (final s in sources) {
@@ -137,21 +202,21 @@ class LearningStore {
         out.add(SuggestedRule(
           type: 'mute',
           source: s.source,
-          confidence: (recycleRate).clamp(0.0, 1.0),
+          confidence: _q01(recycleRate),
           reason: 'You recycle ~${(recycleRate * 100).round()}% of signals from this source.',
         ));
       } else if (taskRate >= 0.60) {
         out.add(SuggestedRule(
           type: 'autoTask',
           source: s.source,
-          confidence: (taskRate).clamp(0.0, 1.0),
+          confidence: _q01(taskRate),
           reason: 'You create tasks from ~${(taskRate * 100).round()}% of signals from this source.',
         ));
       } else if (corkRate >= 0.55) {
         out.add(SuggestedRule(
           type: 'autoCork',
           source: s.source,
-          confidence: (corkRate).clamp(0.0, 1.0),
+          confidence: _q01(corkRate),
           reason: 'You pin ~${(corkRate * 100).round()}% of signals from this source to the Corkboard.',
         ));
       }
@@ -160,4 +225,45 @@ class LearningStore {
     out.sort((a, b) => b.confidence.compareTo(a.confidence));
     return out.take(8).toList(growable: false);
   }
+
+  /// Returns aggregated stats for a specific source.
+  static Future<SourceLearningStats> statsForSource(String source) async {
+    final raw = await _readRaw();
+    final sources = (raw['sources'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+    final cur = (sources[source] as Map?)?.cast<String, dynamic>() ??
+        {'source': source, 'total': 0, 'toTask': 0, 'toCorkboard': 0, 'recycled': 0, 'acked': 0};
+
+    return SourceLearningStats(
+      source: source,
+      total: (cur['total'] ?? 0) as int,
+      toTask: (cur['toTask'] ?? 0) as int,
+      toCorkboard: (cur['toCorkboard'] ?? 0) as int,
+      recycled: (cur['recycled'] ?? 0) as int,
+      acked: (cur['acked'] ?? 0) as int,
+    );
+  }
+
+  /// Suggests a dominant action for a single source once the training minimum is met.
+  ///
+  /// Returns null when:
+  /// - total < minSamples
+  /// - dominant confidence < suggestMinConfidence
+  static Future<SignalActionType?> suggestActionForSource(
+    String source, {
+    int minSamples = 25,
+    double suggestMinConfidence = 0.7,
+  }) async {
+    final s = await statsForSource(source);
+    if (!s.meetsTrainingMinimum(minSamples)) return null;
+    final dom = s.dominantAction();
+    final conf = s.confidenceFor(dom);
+    if (conf < suggestMinConfidence) return null;
+    return dom;
+  }
+
+  static double suggestConfidenceThreshold() => 0.7;
+  static double autoRouteEligibleThreshold() => 0.85;
+  static int trainingMinimum() => 25;
+
 }
+

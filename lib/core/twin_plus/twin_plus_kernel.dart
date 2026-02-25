@@ -65,8 +65,8 @@ class TwinPlusKernel {
       payload: {
         'decisionId': plan.decisionId,
         'strategy': plan.strategy,
-        'timeSensitivity': plan.timeSensitivity,
-        'verifiability': plan.verifiability,
+        'timeSensitivityW': plan.timeSensitivityW,
+        'verifiabilityW': plan.verifiabilityW,
         'aiAllowed': plan.aiAllowed,
         'aiProvider': plan.aiProvider,
         'budgetTokensMax': plan.budgetTokensMax,

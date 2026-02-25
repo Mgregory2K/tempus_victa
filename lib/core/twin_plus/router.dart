@@ -59,7 +59,10 @@ class QueryIntent {
   final String surface;
   final String queryText;
   final TaskType taskType;
-  final String timeHorizon; // now|today|week|month|timeless
+
+  /// 'now'|'today'|'week'|'month'|'timeless'
+  final String timeHorizon;
+
   final bool needsVerifiableFacts;
   final DateTime? deadlineUtc;
   final List<String> recentUserTurns;
@@ -75,13 +78,25 @@ class QueryIntent {
   });
 }
 
+/// Numeric weights are used everywhere (0.0–1.0), quantized to 0.1 increments.
+/// This avoids over-weighting any single action and keeps learning incremental.
 class RoutePlan {
   final String decisionId;
-  final String strategy; // local_only|local_then_web|web_then_llm|local_then_llm|local_then_web_then_llm
-  final String timeSensitivity; // low|med|high
-  final String verifiability; // none|preferred|required
+
+  /// local_only|local_then_web|web_then_llm|local_then_llm|local_then_web_then_llm
+  final String strategy;
+
+  /// 0.0–1.0 (0.1 increments). Higher means "more time-sensitive".
+  final double timeSensitivityW;
+
+  /// 0.0–1.0 (0.1 increments). Higher means "requires verifiable sources".
+  final double verifiabilityW;
+
   final bool aiAllowed;
-  final String aiProvider; // openai|gemini|none
+
+  /// openai|gemini|none
+  final String aiProvider;
+
   final int budgetTokensMax;
   final int cacheTtlSeconds;
   final List<String> reasonCodes;
@@ -89,14 +104,19 @@ class RoutePlan {
   const RoutePlan({
     required this.decisionId,
     required this.strategy,
-    required this.timeSensitivity,
-    required this.verifiability,
+    required this.timeSensitivityW,
+    required this.verifiabilityW,
     required this.aiAllowed,
     required this.aiProvider,
     required this.budgetTokensMax,
     required this.cacheTtlSeconds,
     required this.reasonCodes,
   });
+}
+
+double _q01(double v) {
+  final clamped = v.clamp(0.0, 1.0);
+  return (clamped * 10.0).round() / 10.0;
 }
 
 class TwinRouter {
@@ -107,7 +127,6 @@ class TwinRouter {
 
   RoutePlan route(QueryIntent intent) {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
-    final q = intent.queryText.trim();
 
     // Router-level deterministic signals so callers can't accidentally disable them.
     // (Callers should pass recent user turns; if they don't, we still behave safely.)
@@ -115,15 +134,35 @@ class TwinRouter {
     final effectiveNeedsFacts = intent.needsVerifiableFacts || sig.needsVerifiableFacts;
     final effectiveTaskType = (intent.taskType == TaskType.unknown) ? sig.taskType : intent.taskType;
 
-    // Determine time sensitivity.
-    final highTime = intent.deadlineUtc != null || intent.timeHorizon == 'now' || intent.timeHorizon == 'today';
-    final timeSensitivity = highTime ? 'high' : (intent.timeHorizon == 'week' ? 'med' : 'low');
+    // Determine numeric time-sensitivity weight.
+    final hasDeadline = intent.deadlineUtc != null;
+    final horizon = intent.timeHorizon;
+    // Base weights (quantized later)
+    double timeW = 0.3;
+    if (horizon == 'timeless') timeW = 0.1;
+    if (horizon == 'month') timeW = 0.3;
+    if (horizon == 'week') timeW = 0.5;
+    if (horizon == 'today') timeW = 0.8;
+    if (horizon == 'now') timeW = 1.0;
+    if (hasDeadline) timeW = max(timeW, 0.9);
 
-    // Determine verifiability.
-    String ver = 'none';
+    // Determine numeric verifiability weight.
+    // Weights are incremental; no single action jumps to a deterministic bucket.
+    double verW = 0.0;
     if (effectiveNeedsFacts || effectiveTaskType == TaskType.webFact || effectiveTaskType == TaskType.events) {
-      ver = prefs.hatesStaleInfo >= 0.35 ? 'required' : 'preferred';
+      // Baseline need for verification.
+      verW = 0.7;
+      // User preference for fresh/verified data nudges upward, not flips.
+      verW = verW + (prefs.hatesStaleInfo * 0.3);
+    } else if (effectiveTaskType == TaskType.travel) {
+      verW = 0.5 + (prefs.hatesStaleInfo * 0.2);
+    } else {
+      // Planning/personal state: verification is optional but can exist.
+      verW = 0.2 + (prefs.hatesStaleInfo * 0.1);
     }
+
+    timeW = _q01(timeW);
+    verW = _q01(verW);
 
     // Determine AI allowance (respects opt-in).
     final aiAllowed = prefs.aiOptIn;
@@ -148,7 +187,7 @@ class TwinRouter {
     } else if (effectiveTaskType == TaskType.planning) {
       strategy = aiAllowed ? 'local_then_llm' : 'local_then_web';
       reasons.add('planning');
-    } else if (ver != 'none') {
+    } else if (verW >= 0.6) {
       strategy = aiAllowed ? 'local_then_web_then_llm' : 'local_then_web';
       reasons.add('needs_verifiable');
     } else if (aiAllowed) {
@@ -159,7 +198,7 @@ class TwinRouter {
       reasons.add('ai_off');
     }
 
-    if (highTime) reasons.add('time_pressure');
+    if (timeW >= 0.8) reasons.add('time_pressure');
     if (prefs.hatesVerbose >= 0.35) reasons.add('prefers_short');
 
     // Budget selection.
@@ -168,9 +207,10 @@ class TwinRouter {
     if (prefs.lengthDefault == 'short') budget = 320;
     if (prefs.lengthDefault == 'long') budget = 900;
 
-    // Cache TTL.
+    // Cache TTL (seconds), scaled by time-sensitivity.
     int ttl = 3600;
-    if (timeSensitivity == 'high') ttl = 900;
+    if (timeW >= 0.8) ttl = 900;
+    if (timeW >= 0.9) ttl = 600;
     if (effectiveTaskType == TaskType.appHowto) ttl = 86400 * 30;
     if (effectiveTaskType == TaskType.travel) ttl = 86400;
     if (effectiveTaskType == TaskType.events) ttl = 21600;
@@ -180,8 +220,8 @@ class TwinRouter {
     return RoutePlan(
       decisionId: id,
       strategy: strategy,
-      timeSensitivity: timeSensitivity,
-      verifiability: ver,
+      timeSensitivityW: timeW,
+      verifiabilityW: verW,
       aiAllowed: aiAllowed,
       aiProvider: aiProvider,
       budgetTokensMax: budget,

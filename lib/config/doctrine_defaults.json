@@ -1,0 +1,22 @@
+{
+  "weights": {
+    "quantization": "0.1",
+    "range": [
+      0.0,
+      1.0
+    ],
+    "timeHorizonDefaults": {
+      "now": 1.0,
+      "today": 0.8,
+      "week": 0.5,
+      "month": 0.3,
+      "timeless": 0.1
+    },
+    "verifiabilityBaseline": {
+      "webFact": 0.7,
+      "travel": 0.5,
+      "planning": 0.2
+    }
+  },
+  "notes": "Numeric weights (0.0\u20131.0, 0.1 increments) replace low/med/high across doctrine routing."
+}
