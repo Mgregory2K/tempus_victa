@@ -62,6 +62,7 @@ class QueryIntent {
   final String timeHorizon; // now|today|week|month|timeless
   final bool needsVerifiableFacts;
   final DateTime? deadlineUtc;
+  final List<String> recentUserTurns;
 
   const QueryIntent({
     required this.surface,
@@ -70,6 +71,7 @@ class QueryIntent {
     this.timeHorizon = 'today',
     this.needsVerifiableFacts = false,
     this.deadlineUtc,
+    this.recentUserTurns = const <String>[],
   });
 }
 
@@ -108,7 +110,8 @@ class TwinRouter {
     final q = intent.queryText.trim();
 
     // Router-level deterministic signals so callers can't accidentally disable them.
-    final sig = IntentSignals.analyze(intent.queryText, recentUserTurns: const []);
+    // (Callers should pass recent user turns; if they don't, we still behave safely.)
+    final sig = IntentSignals.analyze(intent.queryText, recentUserTurns: intent.recentUserTurns);
     final effectiveNeedsFacts = intent.needsVerifiableFacts || sig.needsVerifiableFacts;
     final effectiveTaskType = (intent.taskType == TaskType.unknown) ? sig.taskType : intent.taskType;
 

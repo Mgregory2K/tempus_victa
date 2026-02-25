@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -361,6 +362,7 @@ class _ReadyRoomState extends State<ReadyRoom> {
         taskType: sig.taskType,
         timeHorizon: 'today',
         needsVerifiableFacts: sig.needsVerifiableFacts,
+        recentUserTurns: recentUserTurns,
       );
 
       final plan = kernel.route(intent);
@@ -692,6 +694,35 @@ class _ReadyRoomState extends State<ReadyRoom> {
     );
   }
 
+  Future<void> _openLegacyFeedbackSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 2),
+                  child: Text('Twin+ quick feedback', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                ),
+                ActionChip(label: const Text('Too long'), onPressed: () => _feedback('Too long')),
+                ActionChip(label: const Text('Wrong source / stale'), onPressed: () => _feedback('Wrong source / stale')),
+                ActionChip(label: const Text('Stop asking questions'), onPressed: () => _feedback('Stop asking questions')),
+                ActionChip(label: const Text('Just the facts… ON'), onPressed: () => _feedback('Just the facts')),
+                ActionChip(label: const Text('Just the facts… OFF'), onPressed: _toggleJustFactsOff),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   
   Future<void> _setVote(String msgId, int? vote) async {
     final idx = _msgs.indexWhere((m) => m.id == msgId);
@@ -847,6 +878,11 @@ void _jumpBottom() {
                   onPressed: _exportFeed,
                   icon: const Icon(Icons.ios_share),
                 ),
+              IconButton(
+                tooltip: 'Feedback',
+                onPressed: _openLegacyFeedbackSheet,
+                icon: const Icon(Icons.feedback_outlined),
+              ),
                 IconButton(
                   tooltip: 'Clear history',
                   onPressed: _clearHistory,
@@ -904,20 +940,13 @@ void _jumpBottom() {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                const SizedBox(height: 8),
+                if (kDebugMode)
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [
-                        const Text('Twin+ quick feedback:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                        ActionChip(label: const Text('Too long'), onPressed: () => _feedback('Too long')),
-                        ActionChip(label: const Text('Wrong source / stale'), onPressed: () => _feedback('Wrong source / stale')),
-                        ActionChip(label: const Text('Stop asking questions'), onPressed: () => _feedback('Stop asking questions')),
-                        ActionChip(label: const Text('Just the facts… ON'), onPressed: () => _feedback('Just the facts')),
-                        ActionChip(label: const Text('Just the facts… OFF'), onPressed: _toggleJustFactsOff),
-                      ],
+                    child: Text(
+                      'Tip: Use the Feedback icon for quick tags (debug only).',
+                      style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   ),
                 ],

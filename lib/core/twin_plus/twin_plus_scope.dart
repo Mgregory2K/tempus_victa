@@ -20,6 +20,13 @@ class TwinPlusScope extends InheritedWidget {
     return scope.kernel;
   }
 
+
+  /// Returns null if no scope is found. Useful for additive instrumentation in low-level widgets.
+  static TwinPlusKernel? maybeOf(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<TwinPlusScope>();
+    return scope?.kernel;
+  }
+
   @override
   bool updateShouldNotify(TwinPlusScope oldWidget) => identical(kernel, oldWidget.kernel) == false;
 }

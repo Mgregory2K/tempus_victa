@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 
-import 'theme/tempus_ui.dart';
-import 'theme/tempus_widgets.dart';
+import '../core/twin_plus/twin_event.dart';
+import '../core/twin_plus/twin_plus_scope.dart';
+import 'widgets/tempus_app_header.dart';
+import 'widgets/tempus_background.dart';
 
-class RoomFrame extends StatelessWidget {
+/// Standard room scaffold wrapper.
+/// Additive wiring: emits Twin+ room open/close events so the system can learn
+/// navigation patterns across the entire app (opt-in learning is enforced by prefs).
+class RoomFrame extends StatefulWidget {
   final String title;
   final Widget child;
-
-  /// Optional floating widget; kept for backward compatibility with Bridge.
   final Widget? floating;
-
-  /// Optional FAB slot used by Tasks/Projects.
   final Widget? fab;
-
-  /// Optional trailing widget in header (e.g., settings icon).
   final Widget? headerTrailing;
 
   const RoomFrame({
@@ -26,7 +25,46 @@ class RoomFrame extends StatelessWidget {
   });
 
   @override
+  State<RoomFrame> createState() => _RoomFrameState();
+}
+
+class _RoomFrameState extends State<RoomFrame> {
+  bool _openedEmitted = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_openedEmitted) return;
+    _openedEmitted = true;
+
+    final kernel = TwinPlusScope.maybeOf(context);
+    if (kernel != null) {
+      kernel.observe(
+        TwinEvent.roomOpened(
+          roomId: widget.title,
+          roomName: widget.title,
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    final kernel = TwinPlusScope.maybeOf(context);
+    if (kernel != null) {
+      kernel.observe(
+        TwinEvent.roomClosed(
+          roomId: widget.title,
+        ),
+      );
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final floatingActionButton = widget.floating ?? widget.fab;
+
     return Scaffold(
       body: SafeArea(
         child: GestureDetector(
@@ -35,14 +73,14 @@ class RoomFrame extends StatelessWidget {
           child: TempusBackground(
             child: Column(
               children: [
-                TempusAppHeader(roomTitle: title, trailing: headerTrailing),
-                Expanded(child: child),
+                TempusAppHeader(roomTitle: widget.title, trailing: widget.headerTrailing),
+                Expanded(child: widget.child),
               ],
             ),
           ),
         ),
       ),
-      floatingActionButton: floating ?? fab,
+      floatingActionButton: floatingActionButton,
     );
   }
 }
