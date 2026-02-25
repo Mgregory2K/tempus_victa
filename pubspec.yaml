@@ -52,3 +52,5 @@ flutter:
   uses-material-design: true
   assets:
     - lib/assets/BoQ.md
+    - lib/assets/bridge_concepts/bridge_concept_light.png
+    - lib/assets/bridge_concepts/bridge_concept_dark.png

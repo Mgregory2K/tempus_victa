@@ -8,6 +8,7 @@ import '../../core/signal_store.dart';
 import '../../core/twin_plus/twin_event.dart';
 import '../../core/twin_plus/twin_plus_kernel.dart';
 import '../../core/usage_ingestor.dart';
+import '../../core/share_ingestor.dart';
 
 class DeviceIngestService {
   static final DeviceIngestService instance = DeviceIngestService._internal();
@@ -34,11 +35,14 @@ class DeviceIngestService {
     _timer = Timer.periodic(const Duration(seconds: 15), (_) async {
       await _pullNotifications();
       await _pullUsage();
+    await _pullShares();
+      await _pullShares();
     });
 
     // Run once immediately.
     await _pullNotifications();
     await _pullUsage();
+    await _pullShares();
   }
 
   Future<void> dispose() async {
@@ -99,6 +103,80 @@ class DeviceIngestService {
         meta: {'count': incoming.length},
       ),
     );
+  }
+
+
+  String _shareFingerprint(String kind, String payload) => 'share|$kind|$payload';
+
+  Future<void> _pullShares() async {
+    final shares = await ShareIngestor.fetchAndClearShares();
+    if (shares.isEmpty) return;
+
+    final existing = await SignalStore.load();
+    final byFp = <String, SignalItem>{for (final s in existing) s.fingerprint: s};
+
+    final now = DateTime.now();
+
+    for (final m in shares) {
+      final kind = (m['kind'] ?? 'text').toString();
+      final subject = (m['subject'] ?? '').toString().trim();
+      final text = (m['text'] ?? '').toString().trim();
+      final uri = (m['uri'] ?? '').toString().trim();
+      final mimeType = (m['mimeType'] ?? '').toString().trim();
+      final tsMs = (m['tsMs'] is int) ? m['tsMs'] as int : int.tryParse('${m['tsMs']}') ?? now.millisecondsSinceEpoch;
+      final createdAt = DateTime.fromMillisecondsSinceEpoch(tsMs);
+
+      String title;
+      String payload;
+      String? body;
+
+      if (kind == 'image') {
+        title = subject.isNotEmpty ? subject : 'Shared image';
+        payload = uri.isNotEmpty ? uri : 'image';
+        body = uri.isNotEmpty ? uri : null;
+      } else {
+        final base = text.isNotEmpty ? text : (uri.isNotEmpty ? uri : subject);
+        final words = base.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+        title = subject.isNotEmpty ? subject : (words.take(6).join(' '));
+        if (title.trim().isEmpty) title = 'Shared item';
+        payload = base;
+        body = base.isNotEmpty ? base : null;
+      }
+
+      final fp = _shareFingerprint(kind, payload);
+      final s = SignalItem(
+        id: createdAt.microsecondsSinceEpoch.toString(),
+        createdAt: createdAt,
+        source: 'share',
+        title: title,
+        body: body,
+        fingerprint: fp,
+        lastSeenAt: createdAt,
+      );
+
+      final e = byFp[fp];
+      if (e == null) {
+        byFp[fp] = s;
+      } else {
+        final newerLast = createdAt.isAfter(e.lastSeenAt) ? createdAt : e.lastSeenAt;
+        byFp[fp] = e.copyWith(lastSeenAt: newerLast, count: e.count + 1);
+      }
+
+      // Learn per share action
+      TwinPlusKernel.instance.observe(
+        TwinEvent.shareIngested(
+          surface: 'device',
+          kind: kind,
+          text: text.isEmpty ? null : text,
+          subject: subject.isEmpty ? null : subject,
+          uri: uri.isEmpty ? null : uri,
+          mimeType: mimeType.isEmpty ? null : mimeType,
+        ),
+      );
+    }
+
+    final merged = byFp.values.toList()..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
+    await SignalStore.save(merged.take(500).toList(growable: false));
   }
 
   Future<void> _pullUsage() async {

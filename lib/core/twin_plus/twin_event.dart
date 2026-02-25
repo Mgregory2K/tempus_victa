@@ -1,7 +1,6 @@
 import 'dart:convert';
 
-enum TwinEventType {
-  appStarted,
+enum TwinEventType {appStarted,
   appResumed,
   appPaused,
   roomOpened,
@@ -18,6 +17,9 @@ enum TwinEventType {
   feedbackGiven,
   outputShaped,
   actionPerformed,
+  shareIngested,
+  suggestionDismissed,
+  suggestionGenerated,
 }
 
 enum TwinActor { user, system }
@@ -185,6 +187,33 @@ class TwinEvent {
         privacy: TwinPrivacy.normal,
       );
 
+
+  static TwinEvent shareIngested({
+    required String surface,
+    required String kind,
+    String? text,
+    String? subject,
+    String? uri,
+    String? mimeType,
+    int? bytes,
+  }) =>
+      TwinEvent(
+        id: _id(),
+        tsUtc: DateTime.now().toUtc(),
+        surface: surface,
+        type: TwinEventType.shareIngested,
+        actor: TwinActor.user,
+        payload: {
+          'kind': kind,
+          if (text != null) 'text': text,
+          if (subject != null) 'subject': subject,
+          if (uri != null) 'uri': uri,
+          if (mimeType != null) 'mimeType': mimeType,
+          if (bytes != null) 'bytes': bytes,
+        },
+        confidence: 0.3,
+      );
+
   static TwinEvent routeChosen({
     required String surface,
     required String decisionId,
@@ -273,6 +302,51 @@ class TwinEvent {
         if (entityType != null) 'entityType': entityType,
         if (entityId != null) 'entityId': entityId,
         if (meta != null) 'meta': meta,
+      },
+    );
+  }
+
+  static TwinEvent suggestionGenerated({
+    required String surface,
+    required String suggestionKind,
+    required double confidence,
+    Map<String, dynamic>? payload,
+    TwinActor actor = TwinActor.system,
+    TwinPrivacy privacy = TwinPrivacy.normal,
+  }) {
+    return TwinEvent(
+      id: _id(),
+      tsUtc: DateTime.now().toUtc(),
+      surface: surface,
+      type: TwinEventType.suggestionGenerated,
+      actor: actor,
+      confidence: confidence,
+      privacy: privacy,
+      payload: {
+        'kind': suggestionKind,
+        if (payload != null) ...payload,
+      },
+    );
+  }
+
+  static TwinEvent suggestionDismissed({
+    required String surface,
+    required String suggestionKind,
+    Map<String, dynamic>? payload,
+    TwinActor actor = TwinActor.user,
+    TwinPrivacy privacy = TwinPrivacy.normal,
+  }) {
+    return TwinEvent(
+      id: _id(),
+      tsUtc: DateTime.now().toUtc(),
+      surface: surface,
+      type: TwinEventType.suggestionDismissed,
+      actor: actor,
+      confidence: 0.5,
+      privacy: privacy,
+      payload: {
+        'kind': suggestionKind,
+        if (payload != null) ...payload,
       },
     );
   }

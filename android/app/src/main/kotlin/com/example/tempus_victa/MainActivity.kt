@@ -156,4 +156,30 @@ class MainActivity: FlutterActivity() {
         return out
     }
 
+
+    private fun fetchAndClearShares(): java.util.ArrayList<java.util.HashMap<String, Any?>> {
+        val p = applicationContext.getSharedPreferences("tempus_prefs", MODE_PRIVATE)
+        val key = "tempus.pendingShares.v1"
+        val raw = p.getString(key, null)
+        val out = java.util.ArrayList<java.util.HashMap<String, Any?>>()
+        if (raw.isNullOrBlank()) return out
+        try {
+            val arr = org.json.JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val m = java.util.HashMap<String, Any?>()
+                val kind = o.optString("kind", "text")
+                m["kind"] = kind
+                m["text"] = o.optString("text", "")
+                m["subject"] = o.optString("subject", "")
+                m["uri"] = o.optString("uri", "")
+                m["mimeType"] = o.optString("mimeType", "")
+                m["tsMs"] = o.optLong("tsMs", System.currentTimeMillis())
+                out.add(m)
+            }
+        } catch (_: Exception) { }
+        p.edit().remove(key).apply()
+        return out
+    }
+
 }

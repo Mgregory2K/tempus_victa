@@ -23,4 +23,13 @@ class ProjectStore {
     final encoded = jsonEncode(items.map((e) => e.toJson()).toList());
     await prefs.setString(_kKey, encoded);
   }
+
+  static Future<ProjectItem> addProject(String name) async {
+    final now = DateTime.now();
+    final id = now.microsecondsSinceEpoch.toString();
+    final p = ProjectItem(id: id, createdAt: now, name: name.trim());
+    final items = await load();
+    await save([p, ...items]);
+    return p;
+  }
 }

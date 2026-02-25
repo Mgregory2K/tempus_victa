@@ -8,6 +8,11 @@ import '../../core/recycle_bin_store.dart';
 import '../../core/signal_item.dart';
 import '../../core/signal_mute_store.dart';
 import '../../core/signal_store.dart';
+import '../../core/list_store.dart';
+import '../../core/suggestion_engine.dart';
+import '../../core/suggestion_result.dart';
+import '../../core/twin_plus/twin_event.dart';
+import '../../core/twin_plus/twin_plus_scope.dart';
 import '../../core/task_item.dart';
 import '../../core/task_store.dart';
 import '../room_frame.dart';
@@ -271,6 +276,7 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
                         if (s.count > 1) TempusPill(text: '${s.count}×'),
                       ],
                     ),
+                    _buildSuggestionRow(ctx, s),
                   ],
                 ),
               ),
@@ -342,7 +348,98 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     );
   }
 
-  Widget _swipeBg(BuildContext ctx, IconData icon, String label, {bool right = false}) {
+  
+  Widget _buildSuggestionRow(BuildContext ctx, SignalItem s) {
+    return FutureBuilder(
+      future: Future.wait([
+        Future.value(SuggestionEngine.suggestForSignal(s)),
+        SuggestionEngine.isDismissed(s.fingerprint),
+        SuggestionEngine.isApplied(s.fingerprint),
+      ]),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final data = snap.data as List;
+        final SuggestionResult? sug = data[0] as SuggestionResult?;
+        final bool dismissed = data[1] as bool;
+        final bool applied = data[2] as bool;
+        if (sug == null || dismissed || applied) return const SizedBox.shrink();
+
+        final cs = Theme.of(ctx).colorScheme;
+        return Container(
+          margin: const EdgeInsets.only(top: 10),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withOpacity(.55),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: cs.outlineVariant.withOpacity(.5)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Add to ${sug.listName} List?',
+                style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                sug.items.take(6).join(', ') + (sug.items.length > 6 ? '…' : ''),
+                style: TextStyle(color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () async {
+                        final kernel = TwinPlusScope.of(ctx);
+                        kernel.observe(TwinEvent.suggestionGenerated(
+                          surface: 'signal_bay',
+                          suggestionKind: sug.kind,
+                          confidence: sug.confidence,
+                          payload: {'listName': sug.listName, 'count': sug.items.length, 'fingerprint': s.fingerprint},
+                        ));
+
+                        await ListStore.addItems(sug.listName, sug.items);
+                        await SuggestionEngine.markApplied(s.fingerprint);
+
+                        kernel.observe(TwinEvent.actionPerformed(
+                          surface: 'signal_bay',
+                          action: 'list_add_from_suggestion',
+                          entityType: 'list',
+                          meta: {'listName': sug.listName, 'count': sug.items.length},
+                        ));
+
+                        if (!mounted) return;
+                        await _load();
+                      },
+                      child: const Text('Confirm'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  OutlinedButton(
+                    onPressed: () async {
+                      final kernel = TwinPlusScope.of(ctx);
+                      await SuggestionEngine.dismiss(s.fingerprint);
+                      kernel.observe(TwinEvent.suggestionDismissed(
+                        surface: 'signal_bay',
+                        suggestionKind: sug.kind,
+                        payload: {'fingerprint': s.fingerprint},
+                      ));
+                      if (!mounted) return;
+                      setState(() {}); // refresh this row
+                    },
+                    child: const Text('Dismiss'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+Widget _swipeBg(BuildContext ctx, IconData icon, String label, {bool right = false}) {
     final cs = Theme.of(ctx).colorScheme;
     return Container(
       alignment: right ? Alignment.centerRight : Alignment.centerLeft,

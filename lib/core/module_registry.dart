@@ -15,6 +15,7 @@ import '../ui/rooms/corkboard_room.dart';
 import '../ui/rooms/analyze_room.dart';
 import '../ui/rooms/global_search_room.dart';
 import '../ui/rooms/quote_board_room.dart';
+import '../ui/rooms/lists_room.dart';
 
 class ModuleRegistry {
   /// Default module list (used to seed first-run and as a reset fallback).
@@ -104,9 +105,9 @@ class ModuleRegistry {
         ModuleDef(
           id: 'lists',
           name: 'Lists',
-          icon: Icons.list_alt_rounded,
+          icon: Icons.checklist_rounded,
           usesCarousel: true,
-          builder: ({required roomName}) => PlaceholderRoom(roomName: roomName),
+          builder: ({required roomName}) => ListsRoom(roomName: roomName),
         ),
         ModuleDef(
           id: 'analyze',
