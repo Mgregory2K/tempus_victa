@@ -1,3 +1,4 @@
+import '../../core/unified_index_service.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';

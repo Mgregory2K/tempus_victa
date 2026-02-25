@@ -1,3 +1,4 @@
+import '../../core/unified_index_service.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_state_scope.dart';
@@ -12,7 +13,6 @@ import '../../core/task_store.dart';
 import '../room_frame.dart';
 import '../theme/tempus_ui.dart';
 import '../widgets/signal_detail_sheet.dart';
-import '../../core/app_settings_store.dart';
 
 class SignalBayRoom extends StatefulWidget {
   final String roomName;
@@ -23,8 +23,6 @@ class SignalBayRoom extends StatefulWidget {
 }
 
 class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserver {
-  bool _devMode = false;
-  final AppSettingsStore _appSettings = AppSettingsStore();
   List<SignalItem> _signals = const [];
   bool _loading = true;
 
@@ -33,7 +31,6 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
   @override
   void initState() {
     super.initState();
-    _loadDevMode();
     WidgetsBinding.instance.addObserver(this);
     _load();
   }
@@ -49,12 +46,6 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     if (state == AppLifecycleState.resumed) {
       _pullNativeSignals();
     }
-  }
-
-  Future<void> _loadDevMode() async {
-    final v = await _appSettings.loadDevMode();
-    if (!mounted) return;
-    setState(() => _devMode = v);
   }
 
   Future<void> _load() async {
@@ -140,6 +131,7 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
 
     final tasks = await TaskStore.load();
     await TaskStore.save([task, ...tasks]);
+    await UnifiedIndexService.addEntry(id: task.id, type: 'task', title: task.title);
     AppStateScope.of(context).bumpTasksVersion();
 
     await _acknowledge(s, true);

@@ -5,8 +5,10 @@ import '../../core/twin_plus/twin_plus_scope.dart';
 import '../../core/twin_plus/twin_event.dart';
 import '../../core/project_item.dart';
 import '../../core/project_store.dart';
+import '../../core/unified_index_service.dart';
 import '../room_frame.dart';
 import '../theme/tempus_ui.dart';
+import '../theme/tv_textfield.dart';
 
 class ProjectsRoom extends StatefulWidget {
   final String roomName;
@@ -45,10 +47,12 @@ class _ProjectsRoomState extends State<ProjectsRoom> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('New project'),
-        content: TextField(
+        content: TvTextField(
           controller: controller,
+          twinSurface: 'projects',
+          twinFieldId: 'new_project_name',
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Project name'),
+          hintText: 'Project name',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -62,6 +66,7 @@ class _ProjectsRoomState extends State<ProjectsRoom> {
     final p = ProjectItem(id: now.microsecondsSinceEpoch.toString(), createdAt: now, name: name);
     setState(() => _projects = [p, ..._projects]);
     await _persist();
+    await UnifiedIndexService.upsert(id: p.id, type: 'project', title: p.name);
   }
 
   @override

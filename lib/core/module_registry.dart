@@ -13,6 +13,7 @@ import '../ui/rooms/ready_room.dart';
 import '../ui/rooms/settings_room.dart';
 import '../ui/rooms/corkboard_room.dart';
 import '../ui/rooms/analyze_room.dart';
+import '../ui/rooms/global_search_room.dart';
 import '../ui/rooms/quote_board_room.dart';
 
 class ModuleRegistry {
@@ -43,6 +44,13 @@ class ModuleRegistry {
           icon: Icons.radar_rounded,
           usesCarousel: true,
           builder: ({required roomName}) => SignalBayRoom(roomName: roomName),
+        ),
+        ModuleDef(
+          id: 'global_search',
+          name: 'Search',
+          icon: Icons.search_rounded,
+          usesCarousel: true,
+          builder: ({required roomName}) => GlobalSearchRoom(roomName: roomName),
         ),
         ModuleDef(
           id: 'corkboard',

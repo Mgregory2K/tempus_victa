@@ -6,6 +6,7 @@ import '../../core/corkboard_store.dart';
 import '../room_frame.dart';
 import '../theme/tempus_theme.dart';
 import '../theme/tempus_ui.dart';
+import '../theme/tv_textfield.dart';
 
 class CorkboardRoom extends StatefulWidget {
   final String roomName;
@@ -74,19 +75,11 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
             children: [
               Text('Edit note', style: Theme.of(ctx).textTheme.titleLarge),
               const SizedBox(height: 10),
-              TextField(
+              TvTextField(
                 controller: ctrl,
                 autofocus: true,
                 maxLines: 6,
-                textCapitalization: TextCapitalization.sentences,
-                autocorrect: true,
-                enableSuggestions: true,
-                decoration: InputDecoration(
-                  hintText: 'Drop an idea…',
-                  filled: true,
-                  fillColor: b.surface1,
-                ),
-              ),
+),
               const SizedBox(height: 12),
               Row(
                 children: [

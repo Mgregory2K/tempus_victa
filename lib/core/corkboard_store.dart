@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:uuid/uuid.dart';
 
 import '../data/db/corkboard_db.dart';
+import 'unified_index_service.dart';
 
 class CorkNoteModel {
   final String id;
@@ -44,10 +45,13 @@ class CorkboardStore {
     final dx = (r.nextDouble() * 18) - 9;
     final dy = (r.nextDouble() * 18) - 9;
 
+    final id = _uuid.v4();
+
     db.execute(
       'INSERT OR REPLACE INTO cork_notes (id, text, x, y, z, color_index, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
-        _uuid.v4(),
+        id,
+        
         text,
         (x ?? 28) + dx,
         (y ?? 90) + dy,
@@ -82,6 +86,13 @@ class CorkboardStore {
     final db = await CorkboardDb.instance();
     final now = DateTime.now().millisecondsSinceEpoch;
     db.execute('UPDATE cork_notes SET text = ?, updated_at_ms = ? WHERE id = ?', [newText, now, id]);
+
+    await UnifiedIndexService.upsert(
+      id: id,
+      type: 'cork',
+      title: newText.trim().isEmpty ? '(Cork note)' : newText.trim(),
+      body: newText,
+    );
   }
 
   static Future<void> updatePosition(String id, double x, double y) async {
@@ -100,6 +111,7 @@ class CorkboardStore {
   static Future<void> delete(String id) async {
     final db = await CorkboardDb.instance();
     db.execute('DELETE FROM cork_notes WHERE id = ?', [id]);
+    await UnifiedIndexService.remove(id);
   }
 
   static Future<int> _maxZ(db) async {
