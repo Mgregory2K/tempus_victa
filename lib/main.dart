@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'core/app_settings_store.dart';
 import 'core/app_theme_controller.dart';
 import 'core/twin_plus/twin_plus_kernel.dart';
+import 'services/device/device_ingest_service.dart';
 import 'core/twin_plus/twin_plus_scope.dart';
 import 'ui/root_shell.dart';
 import 'ui/theme/tempus_theme.dart';
@@ -10,6 +11,7 @@ import 'ui/theme/tempus_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await TwinPlusKernel.instance.init();
+  await DeviceIngestService.instance.init();
   runApp(const TempusApp());
 }
 

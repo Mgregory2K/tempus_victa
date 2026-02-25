@@ -76,7 +76,20 @@ class MainActivity: FlutterActivity() {
                     prefs.edit().putString("buffer", "[]").apply()
                     result.success(out)
                 }
+                
+                "isUsageAccessEnabled" -> result.success(isUsageAccessEnabled())
+                "openUsageAccessSettings" -> {
+                    openUsageAccessSettings()
+                    result.success(null)
+                }
+                "fetchUsageEvents" -> {
+                    val since = (call.argument<Number>("sinceEpochMs")?.toLong()) ?: (System.currentTimeMillis() - 600000)
+                    val maxEvents = (call.argument<Number>("maxEvents")?.toInt()) ?: 250
+                    val list = fetchUsageEvents(since, maxEvents)
+                    result.success(list)
+                }
                 else -> result.notImplemented()
+
             }
         }
     }

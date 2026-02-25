@@ -10,7 +10,7 @@ packages:
     source: hosted
     version: "1.0.7"
   _fe_analyzer_shared:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: _fe_analyzer_shared
       sha256: "8d7ff3948166b8ec5da0fbb5962000926b8e02f2ed9b3e51d1738905fbd4c98d"
@@ -26,7 +26,7 @@ packages:
     source: hosted
     version: "1.3.66"
   analyzer:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: analyzer
       sha256: de7148ed2fcec579b19f122c1800933dfa028f6d9fd38a152b04b1516cec120b
@@ -665,7 +665,7 @@ packages:
     source: hosted
     version: "0.13.0"
   meta:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: meta
       sha256: "23f08335362185a5ea2ad3a4e597f1375e78bce8a040df5c600c8d3552ef2394"

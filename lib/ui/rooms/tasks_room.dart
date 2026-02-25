@@ -1,4 +1,3 @@
-import '../../core/unified_index_service.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,6 +14,7 @@ import '../../core/twin_plus/twin_plus_scope.dart';
 import '../../core/twin_plus/twin_event.dart';
 import '../room_frame.dart';
 import '../theme/tv_textfield.dart';
+import '../../services/voice/voice_service.dart';
 import '../../core/app_settings_store.dart';
 import '../widgets/dev_trace_panel.dart';
 
@@ -89,6 +89,90 @@ class _TasksRoomState extends State<TasksRoom> {
     if (!mounted) return;
     AppStateScope.of(context).bumpTasksVersion();
   }
+
+
+  Future<void> _createVoiceTaskQuick() async {
+    String live = '';
+    bool listening = true;
+
+    // Start listening immediately.
+    await VoiceService.instance.start(
+      onPartial: (p) {
+        live = p;
+      },
+    );
+
+    final transcript = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          // lightweight ticker to repaint while voice updates (no assumptions about stream)
+          Future.delayed(const Duration(milliseconds: 250), () {
+            if (listening) setLocal(() {});
+          });
+
+          return AlertDialog(
+            title: const Text('Voice task'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Text(
+                live.trim().isEmpty ? 'Listening…' : live.trim(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  listening = false;
+                  await VoiceService.instance.stop(finalTranscript: '');
+                  if (!ctx.mounted) return;
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  listening = false;
+                  final res = await VoiceService.instance.stop(finalTranscript: live);
+                  if (!ctx.mounted) return;
+                  Navigator.pop(ctx, res.transcript);
+                },
+                child: const Text('Create'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+
+    if (transcript == null) return;
+    final ttxt = transcript.trim();
+    if (ttxt.isEmpty) return;
+
+    final now = DateTime.now();
+    final task = TaskItem(
+      id: now.microsecondsSinceEpoch.toString(),
+      createdAt: now,
+      title: TaskItem.titleFromTranscript(ttxt, maxWords: 6),
+      transcript: ttxt,
+      audioDurationMs: null, // VoiceService duration is emitted in TvTextField path; Bridge handles audio duration.
+      audioPath: null,
+      projectId: null,
+    );
+
+    final tasks = await TaskStore.load();
+    await TaskStore.save([task, ...tasks]);
+    await MetricsStore.inc(TvMetrics.tasksCreatedVoice);
+
+    final kernel = TwinPlusScope.of(context);
+    kernel.observe(
+      TwinEvent.actionPerformed(surface: 'tasks', action: 'task_created_voice', entityType: 'task', entityId: task.id),
+    );
+
+    if (!mounted) return;
+    AppStateScope.of(context).bumpTasksVersion();
+  }
+
 
   Future<void> _renameTask(TaskItem task) async {
     final controller = TextEditingController(text: task.title);
@@ -569,4 +653,3 @@ class _TaskDetailState extends State<_TaskDetail> {
     return '$m:$ss';
   }
 }
-

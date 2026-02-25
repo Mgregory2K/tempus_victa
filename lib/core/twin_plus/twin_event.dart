@@ -9,6 +9,7 @@ enum TwinEventType {
 
   textEdited,
   textSubmitted,
+  voiceCaptured,
   styleCheckRequested,
   autocorrectOverride,
 
@@ -153,6 +154,32 @@ class TwinEvent {
           'hasCaps': hasCaps,
           'hasProfanity': hasProfanity,
           'punctuationDensity': punctuationDensity,
+        },
+        confidence: 1.0,
+        privacy: TwinPrivacy.normal,
+      );
+
+
+  static TwinEvent voiceCaptured({
+    required String surface,
+    required String fieldId,
+    required int durationMs,
+    required String preview6,
+    int? chars,
+    int? words,
+  }) =>
+      TwinEvent(
+        id: _id(),
+        tsUtc: DateTime.now().toUtc(),
+        surface: surface,
+        type: TwinEventType.voiceCaptured,
+        actor: TwinActor.user,
+        payload: {
+          'fieldId': fieldId,
+          'durationMs': durationMs,
+          'preview6': preview6,
+          if (chars != null) 'chars': chars,
+          if (words != null) 'words': words,
         },
         confidence: 1.0,
         privacy: TwinPrivacy.normal,

@@ -14,7 +14,7 @@ dependencies:
   uuid: ^4.5.1
   record: ^6.2.0
   just_audio: ^0.10.5
-  speech_to_text: ^7.0.0
+  speech_to_text: ^7.3.0
   url_launcher: ^6.3.2
   sqlite3: ^3.1.6
   sqlite3_flutter_libs: ^0.6.0+eol
@@ -39,6 +39,9 @@ dependencies:
   auto_size_text: ^3.0.0
   flutter_animate: ^4.5.2
   provider: ^6.1.5+1
+  _fe_analyzer_shared: ^93.0.0
+  analyzer: ^10.0.1
+  meta: ^1.17.0
 
 dev_dependencies:
   flutter_test:

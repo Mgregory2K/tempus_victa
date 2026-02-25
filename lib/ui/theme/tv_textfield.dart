@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../../core/twin_plus/twin_event.dart';
 import '../../core/twin_plus/twin_plus_kernel.dart';
+import '../../services/voice/voice_capture_store.dart';
+import '../../services/voice/voice_service.dart';
 
 /// Central defaults for all text input in Tempus, Victa:
 /// - Autocorrect ON
 /// - Suggestions ON
 /// - Sentence capitalization
-/// - Optional voice input (mic button) for driving-safety
+/// - Optional voice input (mic button)
 ///
 /// Twin+ hooks:
 /// - Provide [twinSurface] + [twinFieldId] to emit local TwinEvents
-///   for text edits/submits. No network. No AI.
+///   for text edits/submits and voice captures. Local-only.
 class TvTextField extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode? focusNode;
@@ -49,8 +50,7 @@ class TvTextField extends StatefulWidget {
 }
 
 class _TvTextFieldState extends State<TvTextField> {
-  final _stt = stt.SpeechToText();
-  bool _sttReady = false;
+  bool _voiceReady = false;
   bool _listening = false;
 
   DateTime _lastEditEmit = DateTime.fromMillisecondsSinceEpoch(0);
@@ -59,20 +59,14 @@ class _TvTextFieldState extends State<TvTextField> {
   void initState() {
     super.initState();
     if (widget.enableVoice && widget.suffixIcon == null) {
-      _initStt();
+      _initVoice();
     }
   }
 
-  Future<void> _initStt() async {
-    try {
-      final ok = await _stt.initialize();
-      if (!mounted) return;
-      setState(() => _sttReady = ok);
-    } catch (_) {
-      // If STT isn't available on device/emulator, fail silent.
-      if (!mounted) return;
-      setState(() => _sttReady = false);
-    }
+  Future<void> _initVoice() async {
+    final ok = await VoiceService.instance.init();
+    if (!mounted) return;
+    setState(() => _voiceReady = ok);
   }
 
   void _emitEdit(String text) {
@@ -88,11 +82,18 @@ class _TvTextFieldState extends State<TvTextField> {
 
     final v = text;
     final chars = v.length;
-    final words = v.trim().isEmpty ? 0 : v.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+    final words = v.trim().isEmpty
+        ? 0
+        : v.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
     final hasCaps = RegExp(r'[A-Z]{2,}').hasMatch(v);
     final lower = v.toLowerCase();
-    final hasProfanity = lower.contains('fuck') || lower.contains('shit') || lower.contains('damn') || lower.contains('bastard');
-    final punct = RegExp(r'[\,\.\!\?\:\;\-\(\)\[\]\{\}]').allMatches(v).length;
+    final hasProfanity = lower.contains('fuck') ||
+        lower.contains('shit') ||
+        lower.contains('damn') ||
+        lower.contains('bastard');
+    final punct = RegExp(r'[\,\.\!\?\:\;\-\(\)\[\]\{\}]')
+        .allMatches(v)
+        .length;
     final punctDensity = chars == 0 ? 0.0 : punct / chars;
 
     TwinPlusKernel.instance.observe(
@@ -118,11 +119,17 @@ class _TvTextFieldState extends State<TvTextField> {
     if (txt.isEmpty) return;
 
     final chars = txt.length;
-    final words = txt.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+    final words =
+        txt.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
     final hasCaps = RegExp(r'[A-Z]{2,}').hasMatch(txt);
     final lower = txt.toLowerCase();
-    final hasProfanity = lower.contains('fuck') || lower.contains('shit') || lower.contains('damn') || lower.contains('bastard');
-    final punct = RegExp(r'[\,\.\!\?\:\;\-\(\)\[\]\{\}]').allMatches(txt).length;
+    final hasProfanity = lower.contains('fuck') ||
+        lower.contains('shit') ||
+        lower.contains('damn') ||
+        lower.contains('bastard');
+    final punct = RegExp(r'[\,\.\!\?\:\;\-\(\)\[\]\{\}]')
+        .allMatches(txt)
+        .length;
     final punctDensity = chars == 0 ? 0.0 : punct / chars;
 
     TwinPlusKernel.instance.observe(
@@ -140,39 +147,78 @@ class _TvTextFieldState extends State<TvTextField> {
   }
 
   Future<void> _toggleListen() async {
-    if (!_sttReady) return;
+    if (!_voiceReady) return;
 
     if (_listening) {
-      await _stt.stop();
+      final res =
+          await VoiceService.instance.stop(finalTranscript: widget.controller.text);
       if (!mounted) return;
       setState(() => _listening = false);
+
+      if (res.transcript.isNotEmpty) {
+        widget.controller.text = res.transcript;
+        widget.controller.selection =
+            TextSelection.collapsed(offset: res.transcript.length);
+      }
+
+      final surface = widget.twinSurface;
+      final fieldId = widget.twinFieldId;
+      if (surface != null &&
+          surface.isNotEmpty &&
+          fieldId != null &&
+          fieldId.isNotEmpty) {
+        // Store capture for the next entity-creation action.
+        VoiceCaptureStore.set(surface: surface, fieldId: fieldId, result: res);
+
+        // Emit Twin+ voice captured event.
+        final words = res.transcript.trim().isEmpty
+            ? 0
+            : res.transcript
+                .trim()
+                .split(RegExp(r'\s+'))
+                .where((w) => w.isNotEmpty)
+                .length;
+        TwinPlusKernel.instance.observe(
+          TwinEvent.voiceCaptured(
+            surface: surface,
+            fieldId: fieldId,
+            durationMs: res.durationMs,
+            preview6: res.preview6,
+            chars: res.transcript.length,
+            words: words,
+          ),
+        );
+      }
+
       return;
     }
 
     setState(() => _listening = true);
-    await _stt.listen(
-      onResult: (res) {
-        final txt = res.recognizedWords.trim();
-        if (txt.isEmpty) return;
-        widget.controller.text = txt;
-        widget.controller.selection = TextSelection.collapsed(offset: txt.length);
+    await VoiceService.instance.start(
+      onPartial: (txt) {
+        final t = txt.trim();
+        if (t.isEmpty) return;
+        widget.controller.text = t;
+        widget.controller.selection = TextSelection.collapsed(offset: t.length);
 
-        _emitEdit(txt);
-        widget.onChanged?.call(txt);
+        _emitEdit(t);
+        widget.onChanged?.call(t);
       },
     );
   }
 
   @override
   void dispose() {
-    _stt.stop();
+    if (_listening) {
+      VoiceService.instance.stop(finalTranscript: widget.controller.text);
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final suffix = widget.suffixIcon ??
-        (widget.enableVoice && _sttReady
+        (widget.enableVoice && _voiceReady
             ? IconButton(
                 tooltip: _listening ? 'Stop voice input' : 'Voice input',
                 onPressed: _toggleListen,
