@@ -26,6 +26,7 @@ class _BridgeRoomState extends State<BridgeRoom> {
 
   bool _isRecording = false;
   String? _activePath;
+  DateTime? _recordingStartedAt;
   String _liveTranscript = '';
 
   Map<String, int> _metrics = const {};
@@ -105,6 +106,7 @@ class _BridgeRoomState extends State<BridgeRoom> {
     setState(() {
       _isRecording = false;
       _activePath = null;
+      _recordingStartedAt = null;
     });
 
     if (path == null || path.trim().isEmpty) return;
@@ -114,12 +116,16 @@ class _BridgeRoomState extends State<BridgeRoom> {
     final transcript = _liveTranscript.trim().isEmpty ? null : _liveTranscript.trim();
     final title = transcript == null ? 'Voice task' : TaskItem.titleFromTranscript(transcript, maxWords: 6);
 
-    final task = TaskItem(
+    final startedAt = _recordingStartedAt;
+    final durationMs = (startedAt == null) ? null : DateTime.now().difference(startedAt).inMilliseconds;
+
+final task = TaskItem(
       id: id,
       createdAt: DateTime.now(),
       title: title,
       audioPath: path,
       transcript: transcript,
+      audioDurationMs: durationMs,
     );
 
     await TaskStore.upsert(task);

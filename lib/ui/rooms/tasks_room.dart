@@ -13,6 +13,7 @@ import '../../core/metrics_store.dart';
 import '../../core/twin_plus/twin_plus_scope.dart';
 import '../../core/twin_plus/twin_event.dart';
 import '../room_frame.dart';
+import '../theme/tv_textfield.dart';
 
 class TasksRoom extends StatefulWidget {
   final String roomName;
@@ -31,12 +32,12 @@ class _TasksRoomState extends State<TasksRoom> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('New task'),
-        content: TextField(
+        content: TvTextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Type a task...',
-          ),
+          hintText: 'Type a task...',
+          twinSurface: 'tasks',
+          twinFieldId: 'new_task',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -76,10 +77,12 @@ class _TasksRoomState extends State<TasksRoom> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Rename task'),
-        content: TextField(
+        content: TvTextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Task title'),
+          hintText: 'Task title',
+          twinSurface: 'tasks',
+          twinFieldId: 'rename_task',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -353,13 +356,19 @@ class _ProjectPickerSheetState extends State<_ProjectPickerSheet> {
                 ),
               ),
             const SizedBox(height: 8),
-            TextField(
-              controller: _newController,
-              decoration: const InputDecoration(
-                labelText: 'Or create new',
+            Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Or create new', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              TvTextField(
+                controller: _newController,
                 hintText: 'New project name',
+                twinSurface: 'tasks',
+                twinFieldId: 'new_project_name',
               ),
-            ),
+            ],
+          ),
             const SizedBox(height: 8),
             Row(
               children: [
