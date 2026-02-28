@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:tempus_victa/services/consent/consent.dart';
 import 'package:tempus_victa/services/redaction/redaction.dart';
+import 'package:tempus_victa/services/db/migration_runner.dart';
 
 class Policy {
   final bool internetAllowed;
@@ -127,8 +128,12 @@ class LocalStore {
       final row = versionRow.first;
       userVer = row['user_version'] as int? ?? 0;
     }
-    if (userVer < 1) {
-      _db.execute('PRAGMA user_version = 1');
+    // Apply any registered migrations (will set PRAGMA user_version accordingly).
+    try {
+      MigrationRunner.applyMigrations(_db);
+    } catch (e) {
+      // If migrations fail, surface as exception in init
+      rethrow;
     }
   }
 
