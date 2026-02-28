@@ -12,6 +12,7 @@ import '../../core/task_store.dart';
 import '../../core/metrics_store.dart';
 import '../../core/twin_plus/twin_plus_scope.dart';
 import '../../core/twin_plus/twin_event.dart';
+import '../../core/capture_executor.dart';
 import '../room_frame.dart';
 import '../theme/tv_textfield.dart';
 import '../../services/voice/voice_service.dart';
@@ -30,7 +31,7 @@ class _TasksRoomState extends State<TasksRoom> {
   Future<List<TaskItem>> _load() => TaskStore.load();
 
   bool _devMode = false;
-  List<String> _devTrace = const [];
+  final List<String> _devTrace = const [];
 
   @override
   void initState() {
@@ -43,6 +44,14 @@ class _TasksRoomState extends State<TasksRoom> {
     if (!mounted) return;
     setState(() => _devMode = v);
   }
+
+  Future<void> _refresh() async {
+    // Reload tasks from local store and refresh UI.
+    if (!mounted) return;
+    AppStateScope.of(context).bumpTasksVersion();
+    setState(() {});
+  }
+
 
 
   Future<void> _createManualTask() async {
@@ -96,13 +105,19 @@ class _TasksRoomState extends State<TasksRoom> {
     bool listening = true;
 
     // Start listening immediately.
-    await VoiceService.instance.start(
+    final started = await VoiceService.instance.start(
       onPartial: (p) {
         live = p;
       },
     );
 
-    final transcript = await showDialog<String>(
+    if (!started) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Voice capture failed to start.')));
+      return;
+    }
+
+    final voiceRes = await showDialog<VoiceResult>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
@@ -135,7 +150,7 @@ class _TasksRoomState extends State<TasksRoom> {
                   listening = false;
                   final res = await VoiceService.instance.stop(finalTranscript: live);
                   if (!ctx.mounted) return;
-                  Navigator.pop(ctx, res.transcript);
+                  Navigator.pop(ctx, res);
                 },
                 child: const Text('Create'),
               ),
@@ -145,33 +160,26 @@ class _TasksRoomState extends State<TasksRoom> {
       },
     );
 
-    if (transcript == null) return;
-    final ttxt = transcript.trim();
+    if (voiceRes == null) return;
+    final ttxt = voiceRes.transcript.trim();
     if (ttxt.isEmpty) return;
 
-    final now = DateTime.now();
-    final task = TaskItem(
-      id: now.microsecondsSinceEpoch.toString(),
-      createdAt: now,
-      title: TaskItem.titleFromTranscript(ttxt, maxWords: 6),
-      transcript: ttxt,
-      audioDurationMs: null, // VoiceService duration is emitted in TvTextField path; Bridge handles audio duration.
-      audioPath: null,
-      projectId: null,
-    );
-
-    final tasks = await TaskStore.load();
-    await TaskStore.save([task, ...tasks]);
-    await MetricsStore.inc(TvMetrics.tasksCreatedVoice);
-
     final kernel = TwinPlusScope.of(context);
-    kernel.observe(
-      TwinEvent.actionPerformed(surface: 'tasks', action: 'task_created_voice', entityType: 'task', entityId: task.id),
+    final exec = await CaptureExecutor.instance.executeVoiceCapture(
+      surface: 'tasks_voice',
+      transcript: ttxt,
+      durationMs: voiceRes.durationMs,
+      audioPath: voiceRes.audioPath,
+      observe: (e) => kernel.observe(e),
     );
 
+    // Minimal UX: refresh tasks list (task may have been created) and jump if executor suggests another module.
     if (!mounted) return;
     AppStateScope.of(context).bumpTasksVersion();
-  }
+    if (exec.nextModule != 'tasks') {
+      AppStateScope.of(context).setSelectedModule(exec.nextModule);
+    }
+}
 
 
   Future<void> _renameTask(TaskItem task) async {
@@ -283,7 +291,9 @@ class _TasksRoomState extends State<TasksRoom> {
         children: [
           if (_devMode) DevTracePanel(lines: _devTrace),
           Expanded(
-            child: FutureBuilder<List<TaskItem>>(
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: FutureBuilder<List<TaskItem>>(
         future: _load(),
         builder: (context, snap) {
           final tasks = snap.data ?? const <TaskItem>[];
@@ -293,7 +303,13 @@ class _TasksRoomState extends State<TasksRoom> {
           }
 
           if (tasks.isEmpty) {
-            return const Center(child: Text('No tasks yet. Tap + to create one.'));
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                SizedBox(height: 180),
+                Center(child: Text('No tasks yet. Pull down to refresh or tap + to create one.')),
+              ],
+            );
           }
 
           return ListView.separated(
@@ -355,6 +371,7 @@ class _TasksRoomState extends State<TasksRoom> {
             },
           );
         },
+              ),
             ),
           ),
         ],

@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/metrics_store.dart';
-import '../../core/twin_plus/twin_plus_scope.dart';
-import '../../core/twin_plus/twin_event.dart';
 import '../../core/project_item.dart';
 import '../../core/project_store.dart';
 import '../../core/unified_index_service.dart';
@@ -160,11 +158,17 @@ class _ProjectsRoomState extends State<ProjectsRoom> {
   }
 
   Widget _projectsList(List<ProjectItem> items) {
-    if (items.isEmpty) {
-      return const Center(child: Text('No projects yet'));
-    }
-
-    return ListView.separated(
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: items.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                SizedBox(height: 180),
+                Center(child: Text('No projects yet. Pull down to refresh.')),
+              ],
+            )
+          : ListView.separated(
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (ctx, i) {
@@ -240,6 +244,7 @@ class _ProjectsRoomState extends State<ProjectsRoom> {
           ),
         );
       },
+      ),
     );
   }
 

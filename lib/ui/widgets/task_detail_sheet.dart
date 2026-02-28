@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../core/app_state_scope.dart';
+import '../../core/doctrine/decision_audit_store.dart';
+import '../../services/audio/audio_player_service.dart';
 import '../../data/tasks/task_model.dart';
 
 class TaskDetailSheet extends StatefulWidget {
@@ -19,9 +21,11 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
   final AudioPlayer _player = AudioPlayer();
   bool _loading = false;
   bool _ready = false;
+  DecisionAuditEntry? _audit;
 
   @override
   void dispose() {
+    AudioPlayerService.instance.stop();
     _player.dispose();
     super.dispose();
   }
@@ -42,7 +46,25 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
     }
   }
 
+    Future<void> _loadAudit() async {
+    final decisionId = widget.task.decisionId;
+    if (decisionId == null || decisionId.trim().isEmpty) return;
+    final entries = await DecisionAuditStore().load();
+    final hit = entries.firstWhere(
+      (e) => e.decisionId == decisionId,
+      orElse: () => DecisionAuditEntry(decisionId: decisionId, action: '(not found)', confidence: 0.0, tsMs: 0),
+    );
+    if (!mounted) return;
+    setState(() => _audit = hit);
+  }
+
   @override
+  void initState() {
+    super.initState();
+    _loadAudit();
+  }
+
+@override
   Widget build(BuildContext context) {
     final app = AppStateScope.of(context);
     final t = widget.task;
@@ -144,6 +166,63 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
                   t.transcript ?? 'Not transcribed yet.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
+              ),
+            ],
+          ),
+
+          ExpansionTile(
+            title: const Text('Provenance'),
+            childrenPadding: const EdgeInsets.only(bottom: 12),
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'decisionId: ${t.decisionId ?? '(none)'}\nlastDecision.action: ${_audit?.action ?? '(loading)'}\nlastDecision.confidence: ${_audit == null ? '(loading)' : _audit!.confidence.toStringAsFixed(2)}',
+                ),
+              ),
+            ],
+          ),
+
+          if (t.audioPath != null && t.audioPath!.trim().isNotEmpty)
+          ExpansionTile(
+            title: const Text('Voice Replay'),
+            childrenPadding: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
+            children: [
+              Builder(
+                builder: (context) {
+                  final p = t.audioPath!;
+                  final exists = File(p).existsSync();
+                  if (!exists) {
+                    return const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Audio file not found (was it cleared?).'),
+                    );
+                  }
+                  return StreamBuilder<PlayerState>(
+                    stream: _player.playerStateStream,
+                    builder: (context, snap) {
+                      final playing = snap.data?.playing ?? false;
+                      return Row(
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              if (playing) {
+                                await AudioPlayerService.instance.pause();
+                              } else {
+                                await AudioPlayerService.instance.playFile(p);
+                              }
+                              if (mounted) setState(() {});
+                            },
+                            icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                            label: Text(playing ? 'Pause' : 'Play'),
+                          ),
+                          const SizedBox(width: 12),
+                          Text('m4a • ${t.audioDurationMs} ms'),
+                        ],
+                      );
+                    },
+                  );
+                },
               ),
             ],
           ),

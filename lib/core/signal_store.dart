@@ -19,6 +19,15 @@ class SignalStore {
         .toList(growable: false);
   }
 
+  static Future<SignalItem?> getById(String id) async {
+    final all = await load();
+    try {
+      return all.firstWhere((s) => s.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> save(List<SignalItem> items) async {
     final prefs = await SharedPreferences.getInstance();
     final encoded = jsonEncode(items.map((e) => e.toJson()).toList());

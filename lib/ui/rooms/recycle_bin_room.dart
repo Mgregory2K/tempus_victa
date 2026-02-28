@@ -73,17 +73,21 @@ class _RecycleBinRoomState extends State<RecycleBinRoom> {
       title: widget.roomName,
       child: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.only(bottom: 24),
-              children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Text('Deleted Tasks', style: TextStyle(fontWeight: FontWeight.w800)),
-                ),
-                if (_tasks.isEmpty)
-                  const ListTile(title: Text('No deleted tasks.'))
-                else
-                  ..._tasks.map((t) => ListTile(
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.only(bottom: 24),
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: Text('Deleted Tasks', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                  if (_tasks.isEmpty)
+                    const ListTile(title: Text('No deleted tasks.'))
+                  else
+                    ..._tasks.map(
+                      (t) => ListTile(
                         leading: const Icon(Icons.task_alt_rounded),
                         title: Text(t.title),
                         subtitle: t.audioPath != null ? const Text('Voice task (audio attached)') : null,
@@ -102,19 +106,23 @@ class _RecycleBinRoomState extends State<RecycleBinRoom> {
                             ),
                           ],
                         ),
-                      )),
-                const Divider(height: 24),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Text('Discarded Signals', style: TextStyle(fontWeight: FontWeight.w800)),
-                ),
-                if (_signals.isEmpty)
-                  const ListTile(title: Text('No discarded signals.'))
-                else
-                  ..._signals.map((s) => ListTile(
+                      ),
+                    ),
+                  const Divider(height: 24),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: Text('Discarded Signals', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                  if (_signals.isEmpty)
+                    const ListTile(title: Text('No discarded signals.'))
+                  else
+                    ..._signals.map(
+                      (s) => ListTile(
                         leading: const Icon(Icons.bolt_rounded),
                         title: Text(s.title),
-                        subtitle: s.body == null ? null : Text(s.body!, maxLines: 2, overflow: TextOverflow.ellipsis),
+                        subtitle: s.body == null
+                            ? null
+                            : Text(s.body!, maxLines: 2, overflow: TextOverflow.ellipsis),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -130,8 +138,10 @@ class _RecycleBinRoomState extends State<RecycleBinRoom> {
                             ),
                           ],
                         ),
-                      )),
-              ],
+                      ),
+                    ),
+                ],
+              ),
             ),
     );
   }

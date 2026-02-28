@@ -8,13 +8,14 @@ import '../../core/recycle_bin_store.dart';
 import '../../core/signal_item.dart';
 import '../../core/signal_mute_store.dart';
 import '../../core/signal_store.dart';
-import '../../core/list_store.dart';
-import '../../core/suggestion_engine.dart';
-import '../../core/suggestion_result.dart';
-import '../../core/twin_plus/twin_event.dart';
-import '../../core/twin_plus/twin_plus_scope.dart';
 import '../../core/task_item.dart';
 import '../../core/task_store.dart';
+import '../../core/twin_plus/twin_plus_kernel.dart';
+import '../../core/twin_plus/twin_event.dart';
+import '../../core/signal_intelligence/signal_feedback_store.dart';
+import '../../core/signal_intelligence/signal_intelligence.dart';
+import '../../core/doctrine/decision_audit_store.dart';
+import '../../core/doctrine/routing_counter_store.dart';
 import '../room_frame.dart';
 import '../theme/tempus_ui.dart';
 import '../widgets/signal_detail_sheet.dart';
@@ -32,6 +33,7 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
   bool _loading = true;
 
   Set<String> _mutedPkgs = const <String>{};
+  SignalFeedbackSnapshot _feedback = const SignalFeedbackSnapshot();
 
   @override
   void initState() {
@@ -54,25 +56,51 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
   }
 
   Future<void> _load() async {
+    await RoutingCounterStore.instance.initialize();
     final items = await SignalStore.load();
     final muted = await SignalMuteStore.loadMutedPackages();
+    final feedback = await SignalFeedbackStore.load();
     if (!mounted) return;
     setState(() {
       _signals = items;
       _mutedPkgs = muted;
+      _feedback = feedback;
       _loading = false;
     });
     await _pullNativeSignals();
   }
 
   Future<void> _refresh() async {
+    await RoutingCounterStore.instance.initialize();
     // Refresh muted packages + ingest fresh notifications.
     final muted = await SignalMuteStore.loadMutedPackages();
+    final feedback = await SignalFeedbackStore.load();
     if (mounted) setState(() => _mutedPkgs = muted);
+    if (mounted) setState(() => _feedback = feedback);
     await _pullNativeSignals();
   }
 
   Future<void> _persist() async => SignalStore.save(_signals);
+
+  Future<void> _auditSignal({
+    required SignalItem s,
+    required String action,
+    required double confidence,
+  }) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final decisionId = 'sig_${action}_${s.id}_$nowMs';
+    await DecisionAuditStore().add(
+      DecisionAuditEntry(
+        decisionId: decisionId,
+        action: action,
+        confidence: confidence,
+        tsMs: nowMs,
+        surface: 'signal_bay',
+        entityType: 'signal',
+        entityId: s.id,
+      ),
+    );
+  }
 
   String _fingerprint(String pkg, String title, String body) => '$pkg|$title|$body';
 
@@ -104,16 +132,19 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
 
     // Merge: dedupe by fingerprint (prefer newest lastSeen), increment count.
     final byFp = <String, SignalItem>{for (final s in _signals) s.fingerprint: s};
+    final newlyAddedOrUpdated = <SignalItem>[];
     for (final s in incoming) {
       final existing = byFp[s.fingerprint];
       if (existing == null) {
         byFp[s.fingerprint] = s;
+        newlyAddedOrUpdated.add(s);
       } else {
         final newerLast = s.lastSeenAt.isAfter(existing.lastSeenAt) ? s.lastSeenAt : existing.lastSeenAt;
         byFp[s.fingerprint] = existing.copyWith(
           lastSeenAt: newerLast,
           count: existing.count + 1,
         );
+        newlyAddedOrUpdated.add(byFp[s.fingerprint]!);
       }
     }
 
@@ -127,10 +158,57 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     setState(() => _signals = capped);
     await _persist();
 
+    // Decision audit: record triage for new/updated signals (local-only provenance).
+    for (final s in newlyAddedOrUpdated.take(50)) {
+      final score = SignalIntelligence.score(s, _feedback).value;
+      await _auditSignal(s: s, action: 'triage', confidence: score);
+    }
+
     await MetricsStore.bump(MetricKeys.signalsIngested, incoming.length);
   }
 
-  Future<void> _toTask(SignalItem s) async {
+  
+  Future<void> _recordRouteDecision(SignalItem s, String routeIntent) async {
+    final score = SignalIntelligence.score(s, _feedback).value;
+    await RoutingCounterStore.instance.recordRouteDecision('signal_bay', routeIntent);
+
+    // Decision audit (separate from the resulting action).
+    await _auditSignal(s: s, action: 'route_decision:$routeIntent', confidence: score);
+
+    // Twin+ observation.
+    if (TwinPlusKernel.instance.isReady) {
+      TwinPlusKernel.instance.observe(
+        TwinEvent.actionPerformed(
+          surface: 'signal_bay',
+          action: 'route_decision',
+          entityType: 'signal',
+          entityId: s.id,
+          meta: {'routeIntent': routeIntent, 'source': s.source},
+          privacy: TwinPrivacy.hashOnly,
+          confidence: score,
+        ),
+      );
+    }
+  }
+
+  Future<void> _routeByIntent(SignalItem s, String routeIntent) async {
+    switch (routeIntent) {
+      case RoutingCounterStore.intentRouteToCorkboard:
+        await _toCorkboardStub(s);
+        return;
+      case RoutingCounterStore.intentRouteToRecycle:
+        await _toRecycle(s);
+        return;
+      case RoutingCounterStore.intentRouteToAcknowledge:
+        await _acknowledge(s, true);
+        return;
+      case RoutingCounterStore.intentRouteToTask:
+      default:
+        await _toTask(s);
+        return;
+    }
+  }
+Future<void> _toTask(SignalItem s) async {
     final now = DateTime.now();
     final task = TaskItem(id: now.microsecondsSinceEpoch.toString(), title: s.title, createdAt: now);
 
@@ -141,6 +219,28 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
 
     await _acknowledge(s, true);
 
+    // Decision audit for provenance.
+    final score = SignalIntelligence.score(s, _feedback).value;
+    await _auditSignal(s: s, action: 'promote_task', confidence: score);
+
+    // Reinforce: promoted to task.
+    await SignalFeedbackStore.bumpSource(s.source, 'promoted');
+    await SignalFeedbackStore.bumpFingerprint(s.fingerprint, 'promoted');
+    final nextFeedback = await SignalFeedbackStore.load();
+    if (mounted) setState(() => _feedback = nextFeedback);
+    if (TwinPlusKernel.instance.isReady) {
+      TwinPlusKernel.instance.observe(
+        TwinEvent.actionPerformed(
+          surface: 'signal_bay',
+          action: 'promote_task',
+          entityType: 'signal',
+          entityId: s.id,
+          meta: {'source': s.source, 'title': s.title},
+          privacy: TwinPrivacy.hashOnly,
+        ),
+      );
+    }
+
     if (!mounted) return;
     AppStateScope.of(context).setSelectedModule('tasks');
   }
@@ -149,6 +249,27 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     // Your current zip has corkboard as a PlaceholderRoom.
     // We still provide the UX action now: mark it acknowledged and jump to Corkboard module.
     await _acknowledge(s, true);
+
+    final score = SignalIntelligence.score(s, _feedback).value;
+    await _auditSignal(s: s, action: 'promote_corkboard', confidence: score);
+
+    // Reinforce: promoted to corkboard (stub for now).
+    await SignalFeedbackStore.bumpSource(s.source, 'promoted');
+    await SignalFeedbackStore.bumpFingerprint(s.fingerprint, 'promoted');
+    final nextFeedback = await SignalFeedbackStore.load();
+    if (mounted) setState(() => _feedback = nextFeedback);
+    if (TwinPlusKernel.instance.isReady) {
+      TwinPlusKernel.instance.observe(
+        TwinEvent.actionPerformed(
+          surface: 'signal_bay',
+          action: 'promote_corkboard',
+          entityType: 'signal',
+          entityId: s.id,
+          meta: {'source': s.source, 'title': s.title},
+          privacy: TwinPrivacy.hashOnly,
+        ),
+      );
+    }
     if (!mounted) return;
     AppStateScope.of(context).setSelectedModule('corkboard');
     ScaffoldMessenger.of(context).showSnackBar(
@@ -162,6 +283,26 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
 
     setState(() => _signals = _signals.where((x) => x.fingerprint != s.fingerprint).toList(growable: false));
     await _persist();
+
+    final score = SignalIntelligence.score(s, _feedback).value;
+    await _auditSignal(s: s, action: 'recycle', confidence: score);
+
+    await SignalFeedbackStore.bumpSource(s.source, 'recycled');
+    await SignalFeedbackStore.bumpFingerprint(s.fingerprint, 'recycled');
+    final nextFeedback = await SignalFeedbackStore.load();
+    if (mounted) setState(() => _feedback = nextFeedback);
+    if (TwinPlusKernel.instance.isReady) {
+      TwinPlusKernel.instance.observe(
+        TwinEvent.actionPerformed(
+          surface: 'signal_bay',
+          action: 'recycle',
+          entityType: 'signal',
+          entityId: s.id,
+          meta: {'source': s.source},
+          privacy: TwinPrivacy.hashOnly,
+        ),
+      );
+    }
   }
 
   Future<void> _acknowledge(SignalItem s, bool ack) async {
@@ -170,6 +311,28 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     });
     await _persist();
     if (ack) await MetricsStore.bump(MetricKeys.signalsAcknowledged);
+
+    if (ack) {
+      await SignalFeedbackStore.bumpSource(s.source, 'acknowledged');
+      await SignalFeedbackStore.bumpFingerprint(s.fingerprint, 'acknowledged');
+      final nextFeedback = await SignalFeedbackStore.load();
+      if (mounted) setState(() => _feedback = nextFeedback);
+      if (TwinPlusKernel.instance.isReady) {
+        TwinPlusKernel.instance.observe(
+          TwinEvent.actionPerformed(
+            surface: 'signal_bay',
+            action: 'acknowledge',
+            entityType: 'signal',
+            entityId: s.id,
+            meta: {'source': s.source},
+            privacy: TwinPrivacy.hashOnly,
+          ),
+        );
+      }
+
+      final score = SignalIntelligence.score(s, _feedback).value;
+      await _auditSignal(s: s, action: 'acknowledge', confidence: score);
+    }
   }
 
   bool _inInbox(SignalItem s) => !s.acknowledged && !_mutedPkgs.contains(s.source);
@@ -177,8 +340,22 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final inbox = _signals.where(_inInbox).toList(growable: false);
-    final log = _signals.where((s) => !_inInbox(s)).toList(growable: false);
+    final inbox = _signals.where(_inInbox).toList(growable: false)
+      ..sort((a, b) {
+        final sa = SignalIntelligence.score(a, _feedback).value;
+        final sb = SignalIntelligence.score(b, _feedback).value;
+        final c = sb.compareTo(sa);
+        if (c != 0) return c;
+        return b.lastSeenAt.compareTo(a.lastSeenAt);
+      });
+    final log = _signals.where((s) => !_inInbox(s)).toList(growable: false)
+      ..sort((a, b) {
+        final sa = SignalIntelligence.score(a, _feedback).value;
+        final sb = SignalIntelligence.score(b, _feedback).value;
+        final c = sb.compareTo(sa);
+        if (c != 0) return c;
+        return b.lastSeenAt.compareTo(a.lastSeenAt);
+      });
 
     return DefaultTabController(
       length: 2,
@@ -276,7 +453,6 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
                         if (s.count > 1) TempusPill(text: '${s.count}×'),
                       ],
                     ),
-                    _buildSuggestionRow(ctx, s),
                   ],
                 ),
               ),
@@ -291,7 +467,19 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
           secondaryBackground: _swipeBg(ctx, Icons.delete_outline, 'Recycle', right: true),
           confirmDismiss: (dir) async {
             if (dir == DismissDirection.startToEnd) {
-              await _showActions(ctx, s);
+              final training = RoutingCounterStore.instance.isTrainingWindow('signal_bay');
+              if (training) {
+                await _showActions(ctx, s);
+                return false;
+              }
+              final learned = RoutingCounterStore.instance.learnedDefaultRoute('signal_bay');
+              await _recordRouteDecision(s, learned);
+              await _routeByIntent(s, learned);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Routed automatically (learned): ${_prettyRouteLabel(learned)}')),
+                );
+              }
               return false;
             } else {
               await _toRecycle(s);
@@ -325,6 +513,7 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
                   subtitle: const Text('Promote this signal into Tasks.'),
                   onTap: () async {
                     Navigator.of(ctx).pop();
+                    await _recordRouteDecision(s, RoutingCounterStore.intentRouteToTask);
                     await _toTask(s);
                   },
                 ),
@@ -337,6 +526,7 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
                   subtitle: const Text('Pin for later review (placeholder in this build).'),
                   onTap: () async {
                     Navigator.of(ctx).pop();
+                    await _recordRouteDecision(s, RoutingCounterStore.intentRouteToCorkboard);
                     await _toCorkboardStub(s);
                   },
                 ),
@@ -348,98 +538,7 @@ class _SignalBayRoomState extends State<SignalBayRoom> with WidgetsBindingObserv
     );
   }
 
-  
-  Widget _buildSuggestionRow(BuildContext ctx, SignalItem s) {
-    return FutureBuilder(
-      future: Future.wait([
-        Future.value(SuggestionEngine.suggestForSignal(s)),
-        SuggestionEngine.isDismissed(s.fingerprint),
-        SuggestionEngine.isApplied(s.fingerprint),
-      ]),
-      builder: (context, snap) {
-        if (!snap.hasData) return const SizedBox.shrink();
-        final data = snap.data as List;
-        final SuggestionResult? sug = data[0] as SuggestionResult?;
-        final bool dismissed = data[1] as bool;
-        final bool applied = data[2] as bool;
-        if (sug == null || dismissed || applied) return const SizedBox.shrink();
-
-        final cs = Theme.of(ctx).colorScheme;
-        return Container(
-          margin: const EdgeInsets.only(top: 10),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerHighest.withOpacity(.55),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: cs.outlineVariant.withOpacity(.5)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Add to ${sug.listName} List?',
-                style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                sug.items.take(6).join(', ') + (sug.items.length > 6 ? '…' : ''),
-                style: TextStyle(color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () async {
-                        final kernel = TwinPlusScope.of(ctx);
-                        kernel.observe(TwinEvent.suggestionGenerated(
-                          surface: 'signal_bay',
-                          suggestionKind: sug.kind,
-                          confidence: sug.confidence,
-                          payload: {'listName': sug.listName, 'count': sug.items.length, 'fingerprint': s.fingerprint},
-                        ));
-
-                        await ListStore.addItems(sug.listName, sug.items);
-                        await SuggestionEngine.markApplied(s.fingerprint);
-
-                        kernel.observe(TwinEvent.actionPerformed(
-                          surface: 'signal_bay',
-                          action: 'list_add_from_suggestion',
-                          entityType: 'list',
-                          meta: {'listName': sug.listName, 'count': sug.items.length},
-                        ));
-
-                        if (!mounted) return;
-                        await _load();
-                      },
-                      child: const Text('Confirm'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  OutlinedButton(
-                    onPressed: () async {
-                      final kernel = TwinPlusScope.of(ctx);
-                      await SuggestionEngine.dismiss(s.fingerprint);
-                      kernel.observe(TwinEvent.suggestionDismissed(
-                        surface: 'signal_bay',
-                        suggestionKind: sug.kind,
-                        payload: {'fingerprint': s.fingerprint},
-                      ));
-                      if (!mounted) return;
-                      setState(() {}); // refresh this row
-                    },
-                    child: const Text('Dismiss'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-Widget _swipeBg(BuildContext ctx, IconData icon, String label, {bool right = false}) {
+  Widget _swipeBg(BuildContext ctx, IconData icon, String label, {bool right = false}) {
     final cs = Theme.of(ctx).colorScheme;
     return Container(
       alignment: right ? Alignment.centerRight : Alignment.centerLeft,
@@ -462,6 +561,28 @@ Widget _swipeBg(BuildContext ctx, IconData icon, String label, {bool right = fal
   }
 
   Future<void> _openDetails(SignalItem s) async {
+    // Lightweight reinforcement: opening details counts as engagement.
+    await SignalFeedbackStore.bumpSource(s.source, 'opened');
+    await SignalFeedbackStore.bumpFingerprint(s.fingerprint, 'opened');
+    final nextFeedback = await SignalFeedbackStore.load();
+    if (mounted) setState(() => _feedback = nextFeedback);
+    if (TwinPlusKernel.instance.isReady) {
+      TwinPlusKernel.instance.observe(
+        TwinEvent.actionPerformed(
+          surface: 'signal_bay',
+          action: 'open_details',
+          entityType: 'signal',
+          entityId: s.id,
+          meta: {'source': s.source},
+          privacy: TwinPrivacy.hashOnly,
+          confidence: 0.85,
+        ),
+      );
+    }
+
+    final score = SignalIntelligence.score(s, _feedback).value;
+    await _auditSignal(s: s, action: 'open_details', confidence: score);
+
     final muted = _mutedPkgs.contains(s.source);
     await showModalBottomSheet(
       context: context,
@@ -470,13 +591,48 @@ Widget _swipeBg(BuildContext ctx, IconData icon, String label, {bool right = fal
       builder: (_) => SignalDetailSheet(
         item: s,
         muted: muted,
+        showRouting: RoutingCounterStore.instance.isTrainingWindow('signal_bay'),
+        onRouteToTask: () async {
+          Navigator.of(context).pop();
+          await _recordRouteDecision(s, RoutingCounterStore.intentRouteToTask);
+          await _toTask(s);
+        },
+        onRouteToCorkboard: () async {
+          Navigator.of(context).pop();
+          await _recordRouteDecision(s, RoutingCounterStore.intentRouteToCorkboard);
+          await _toCorkboardStub(s);
+        },
+        onRouteToRecycle: () async {
+          Navigator.of(context).pop();
+          await _recordRouteDecision(s, RoutingCounterStore.intentRouteToRecycle);
+          await _toRecycle(s);
+        },
         onAcknowledge: (v) async {
           await _acknowledge(s, v);
         },
         onMuteChanged: (v) async {
           final updated = await SignalMuteStore.loadMutedPackages();
+          if (v) {
+            await SignalFeedbackStore.bumpSource(s.source, 'muted');
+            await SignalFeedbackStore.bumpFingerprint(s.fingerprint, 'muted');
+          }
+          final nextFeedback = await SignalFeedbackStore.load();
           if (!mounted) return;
-          setState(() => _mutedPkgs = updated);
+          setState(() {
+            _mutedPkgs = updated;
+            _feedback = nextFeedback;
+          });
+          if (TwinPlusKernel.instance.isReady) {
+            TwinPlusKernel.instance.observe(
+              TwinEvent.actionPerformed(
+                surface: 'signal_bay',
+                action: v ? 'mute_source' : 'unmute_source',
+                entityType: 'signal_source',
+                entityId: s.source,
+                privacy: TwinPrivacy.hashOnly,
+              ),
+            );
+          }
         },
       ),
     );
@@ -498,7 +654,33 @@ Widget _swipeBg(BuildContext ctx, IconData icon, String label, {bool right = fal
     );
   }
 
-  Widget _emptyLog(BuildContext context) {
+  
+  String _prettyRouteLabel(String intent) {
+    final s = intent.trim();
+    if (s.isEmpty) return 'Unknown';
+    switch (s) {
+      case 'task':
+        return 'Task';
+      case 'corkboard':
+        return 'Corkboard';
+      case 'quote':
+        return 'Quote';
+      case 'project':
+        return 'Project';
+      case 'recycle':
+        return 'Recycle';
+      case 'ignore':
+        return 'Ignore';
+      case 'signal_bay':
+        return 'Signal Bay';
+      default:
+        final parts = s.split(RegExp(r'[_\-\s]+')).where((p) => p.isNotEmpty).toList();
+        if (parts.isEmpty) return s;
+        return parts.map((p) => p[0].toUpperCase() + p.substring(1)).join(' ');
+    }
+  }
+
+Widget _emptyLog(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return TempusCard(
       child: Column(

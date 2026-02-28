@@ -10,12 +10,17 @@ import '../twin_plus/router.dart';
 
 import 'doctrine_models.dart';
 import 'doctrine_result.dart';
+import 'doctrine_plan.dart';
 
 /// Canonical executor for Local → Internet → AI.
 ///
 /// Twin+ decides the *plan* (RoutePlan). DoctrineEngine executes it deterministically.
 /// No UI should call OpenAI or WebSearchClient directly once wired.
 class DoctrineEngine {
+  static DoctrineEngine? _instance;
+  static DoctrineEngine get instance =>
+      _instance ??= DoctrineEngine(kernel: TwinPlusKernel.instance);
+
   final TwinPlusKernel kernel;
   final WebSearchClient web;
 
@@ -27,6 +32,7 @@ class DoctrineEngine {
   Future<DoctrineResult> execute(DoctrineRequest req) async {
     final sw = Stopwatch()..start();
     final debugTrace = <String>[];
+    final planSteps = <DoctrinePlanStep>[];
 
     final intent = req.toQueryIntent();
     final plan = kernel.router.route(intent);
@@ -41,7 +47,7 @@ class DoctrineEngine {
       debugTrace.add('aiProvider=${plan.aiProvider}');
       debugTrace.add('budgetTokensMax=${plan.budgetTokensMax}');
       if (plan.reasonCodes.isNotEmpty) {
-        debugTrace.add('reasonCodes=' + plan.reasonCodes.join(','));
+        debugTrace.add('reasonCodes=${plan.reasonCodes.join(',')}');
       }
     }
 
@@ -57,6 +63,8 @@ class DoctrineEngine {
       ),
     );
 
+    planSteps.add(const DoctrinePlanStep(layer: 'local', action: 'resolve_local', note: 'v1: minimal resolver'));
+
     // NOTE: Local resolver is intentionally minimal right now.
     // Local-first behavior is preserved by the plan + future resolvers. Today we guarantee never-zero-results.
     String answerText = '';
@@ -68,6 +76,7 @@ class DoctrineEngine {
     WebSearchResponse? webResp;
     if (needsWeb) {
       final webSw = Stopwatch()..start();
+      planSteps.add(const DoctrinePlanStep(layer: 'web', action: 'search_web'));
       webResp = await web.search(intent.queryText, maxLinks: 6);
       webSw.stop();
       if (req.devMode) {
@@ -175,9 +184,12 @@ class DoctrineEngine {
     sw.stop();
     if (req.devMode) debugTrace.add('total.ms=${sw.elapsedMilliseconds}');
 
+    final execPlan = DoctrinePlan(decisionId: plan.decisionId, steps: planSteps);
+
     return DoctrineResult(
       decisionId: plan.decisionId,
       text: shaped.text,
+      plan: execPlan,
       webResults: webResults,
       fallbackLinks: fallbackLinks,
       reasonCodes: plan.reasonCodes,

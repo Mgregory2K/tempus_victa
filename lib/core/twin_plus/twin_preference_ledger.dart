@@ -5,8 +5,22 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 class TwinPreferenceLedger {
+  // ZIP 32 — Confidence decay (habit aging).
+  static const double _decayPerDay = 0.015; // ~1.5% per day
+  static const double _minDecayFactor = 0.55;
+
+  static double _applyDecay(double w, int lastEvidenceMs) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final ageMs = nowMs - lastEvidenceMs;
+    if (ageMs <= 0) return w;
+    final days = ageMs / (1000.0 * 60 * 60 * 24);
+    final factor = 1.0 - (_decayPerDay * days);
+    final clamped = factor < _minDecayFactor ? _minDecayFactor : (factor > 1.0 ? 1.0 : factor);
+    return (w * clamped).clamp(0.0, 1.0);
+  }
+
   final File _file;
-  Map<String, dynamic> _state;
+  final Map<String, dynamic> _state;
 
   static const String _kDownvoteDetailThreshold = 'downvoteDetailThreshold';
   static const String _kDownvoteDetailCount = 'downvoteDetailCount';

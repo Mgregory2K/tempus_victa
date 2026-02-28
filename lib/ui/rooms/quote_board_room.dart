@@ -92,7 +92,7 @@ class _QuoteBoardRoomState extends State<QuoteBoardRoom> {
       }
       entries.add(
         QuoteEntry(
-          id: DateTime.now().microsecondsSinceEpoch.toString() + '_${entries.length}',
+          id: '${DateTime.now().microsecondsSinceEpoch}_${entries.length}',
           quote: q,
           author: author,
           source: pendingSource?.trim().isEmpty == true ? null : pendingSource?.trim(),
@@ -269,17 +269,25 @@ class _QuoteBoardRoomState extends State<QuoteBoardRoom> {
                 hintText: 'Search quotes or authors…',
               ),
             ),
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : items.isEmpty
-                    ? const Center(child: Text('No quotes yet. Add one.'))
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: items.length,
-                        itemBuilder: (_, i) => _QuoteCard(entry: items[i]),
-                      ),
+          ),          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : items.isEmpty
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: const [
+                            SizedBox(height: 180),
+                            Center(child: Text('No quotes yet. Pull down to refresh or add one.')),
+                          ],
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: items.length,
+                          itemBuilder: (_, i) => _QuoteCard(entry: items[i]),
+                        ),
+            ),
           ),
           SafeArea(
             top: false,

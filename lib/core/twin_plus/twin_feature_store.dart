@@ -105,16 +105,18 @@ class TwinFeatureStore {
     // Word count deviation.
     if (_samples >= 5) {
       final d = (words - avgWords).abs();
-      if (d > 20) score -= 18;
-      else if (d > 12) score -= 10;
+      if (d > 20) {
+        score -= 18;
+      } else if (d > 12) score -= 10;
       else if (d > 7) score -= 6;
     }
 
     // Punctuation deviation.
     if (_samples >= 5) {
       final d = (punct - avgPunctDensity).abs();
-      if (d > 0.10) score -= 12;
-      else if (d > 0.06) score -= 7;
+      if (d > 0.10) {
+        score -= 12;
+      } else if (d > 0.06) score -= 7;
     }
 
     // Caps/profanity are “style” features. Only penalize if mismatch is strong.

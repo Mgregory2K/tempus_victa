@@ -125,6 +125,21 @@ class SourceLearningStats {
   bool meetsTrainingMinimum([int min = 25]) => total >= min;
 }
 
+
+class AutoRouteDecision {
+  final String source;
+  final SignalActionType action;
+  final double confidence; // 0..1 quantized to 0.1
+  final int samples;
+
+  const AutoRouteDecision({
+    required this.source,
+    required this.action,
+    required this.confidence,
+    required this.samples,
+  });
+}
+
 class LearningStore {
   static const _fileName = 'learning_signals_v1.json';
 
@@ -264,6 +279,36 @@ class LearningStore {
   static double suggestConfidenceThreshold() => 0.7;
   static double autoRouteEligibleThreshold() => 0.85;
   static int trainingMinimum() => 25;
+
+  static Future<bool> trainingWindowOpen(String source, {int? minSamples}) async {
+    final s = await statsForSource(source);
+    final min = minSamples ?? trainingMinimum();
+    return s.total < min;
+  }
+
+  /// Returns an auto-route decision once the training minimum is met and confidence is high.
+  ///
+  /// This is intended to be used by Signal Bay (and later Doctrine) to automatically route
+  /// routine sources safely.
+  static Future<AutoRouteDecision?> autoRouteDecisionForSource(
+    String source, {
+    int minSamples = 25,
+    double minConfidence = 0.85,
+  }) async {
+    final s = await statsForSource(source);
+    if (!s.meetsTrainingMinimum(minSamples)) return null;
+
+    final dom = s.dominantAction();
+    final conf = s.confidenceFor(dom);
+    if (conf < minConfidence) return null;
+
+    return AutoRouteDecision(
+      source: source,
+      action: dom,
+      confidence: conf,
+      samples: s.total,
+    );
+  }
 
 }
 

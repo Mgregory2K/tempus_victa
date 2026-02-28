@@ -73,7 +73,6 @@ class TempusTheme {
     final cs = base.colorScheme.copyWith(
       primary: const Color(0xFF1F7A4D),
       secondary: neonGreen,
-      background: const Color(0xFFF6F5F2),
       surface: const Color(0xFFFBF9F5),
       outlineVariant: const Color(0xFFE7E2D9),
     );
@@ -150,7 +149,6 @@ class TempusTheme {
     final cs = base.colorScheme.copyWith(
       primary: neonGreen,
       secondary: neonGreen,
-      background: const Color(0xFF0B0F14),
       surface: const Color(0xFF0F1620),
       outlineVariant: const Color(0xFF243244),
     );

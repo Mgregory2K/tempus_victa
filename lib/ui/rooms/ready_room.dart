@@ -11,12 +11,13 @@ import '../../core/metrics_store.dart';
 import '../../core/ready_room_store.dart';
 import '../../core/sources_of_truth_store.dart';
 import '../../core/twin_plus/router.dart';
-import '../../core/twin_plus/shaper.dart';
 import '../../core/twin_plus/twin_plus_scope.dart';
 import '../../core/twin_plus/twin_event.dart';
 import '../../services/ai/ai_settings_store.dart';
 import '../../services/ai/openai_client.dart';
 import '../../services/web/web_search_client.dart';
+import '../../core/doctrine/doctrine_engine.dart';
+import '../../core/doctrine/doctrine_models.dart';
 import '../theme/tv_textfield.dart';
 import '../../core/app_settings_store.dart';
 import '../widgets/dev_trace_panel.dart';
@@ -371,71 +372,61 @@ class _ReadyRoomState extends State<ReadyRoom> {
         await kernel.prefs.setJustTheFacts(true);
       }
 
-      // Minimal intent: Ready Room is generally planning/synthesis unless you explicitly treat it as app-howto elsewhere.
+      // Build recent context for routing & follow-up heuristics.
       final recentUserTurns = _msgs
           .where((m) => m.role == 'user')
           .map((m) => m.text)
           .toList();
+
       final sig = IntentSignals.analyze(text, recentUserTurns: recentUserTurns);
 
-      final intent = QueryIntent(
-        surface: 'ready_room',
-        queryText: text,
-        taskType: sig.taskType,
-        timeHorizon: 'today',
-        needsVerifiableFacts: sig.needsVerifiableFacts,
-        recentUserTurns: recentUserTurns,
-      );
-
-      final plan = kernel.route(intent);
-      _lastDecisionId = plan.decisionId;
-      if (_devMode) {
-        setState(() {
-          _devTrace = <String>[
-            'surface=ready_room',
-            'decisionId=${plan.decisionId}',
-            'timeW=${plan.timeSensitivityW.toStringAsFixed(1)}',
-            'verW=${plan.verifiabilityW.toStringAsFixed(1)}',
-            'strategy=${plan.strategy}',
-            'aiAllowed=${plan.aiAllowed}',
-            'aiProvider=${plan.aiProvider}',
-          ];
-        });
-      }
-
-      String reply;
-      if (_protocolActive) {
-        reply = await _protocolRespond(
-          input: text,
-          aiEnabled: aiEnabled && plan.aiAllowed,
-          apiKey: apiKey,
-          maxOutputTokens: plan.budgetTokensMax,
-          webFirst: plan.strategy.contains('web'),
-          llmAllowedByPlan: plan.strategy.contains('llm'),
-        );
-      } else {
-        reply = await _normalRespond(
-          input: text,
-          aiEnabled: aiEnabled && plan.aiAllowed,
-          apiKey: apiKey,
-          maxOutputTokens: plan.budgetTokensMax,
-          webFirst: plan.strategy.contains('web'),
-          llmAllowedByPlan: plan.strategy.contains('llm'),
-        );
-      }
-
-      final shaped = kernel.shape(
-        OutputIntent(
+      // Canonical routing/execution: Local → Trusted → Web → AI (opt-in)
+      final result = await DoctrineEngine.instance.execute(
+        DoctrineRequest(
           surface: 'ready_room',
-          purpose: _protocolActive ? 'plan' : 'inform',
-          draftText: reply,
-          constraints: justFactsSignal ? const ['Just the facts'] : const <String>[],
+          inputText: text,
+          recentUserTurns: recentUserTurns,
+          timeHorizon: 'today',
+          needsVerifiableFacts: sig.needsVerifiableFacts,
+          taskType: sig.taskType,
+          devMode: _devMode,
         ),
       );
 
-      await _append('assistant', shaped.text);
-      _jumpBottom();
-    } catch (e) {
+      _lastDecisionId = result.decisionId;
+
+      if (_devMode) {
+        setState(() {
+          _devTrace = result.debugTrace;
+        });
+      }
+
+      var out = result.text.trim();
+
+      // Append curated sources (no engine branding).
+      if (result.webResults.isNotEmpty) {
+        final b = StringBuffer();
+        b.writeln(out);
+        b.writeln();
+        b.writeln('Sources:');
+        for (final r in result.webResults) {
+          b.writeln('- ${r.title}');
+          b.writeln('  ${r.url}');
+        }
+        out = b.toString().trim();
+      } else if (result.fallbackLinks.isNotEmpty) {
+        final b = StringBuffer();
+        b.writeln(out);
+        b.writeln();
+        b.writeln('Links:');
+        for (final u in result.fallbackLinks) {
+          b.writeln('- $u');
+        }
+        out = b.toString().trim();
+      }
+
+      await _append('system', out);
+} catch (e) {
       await _append('assistant', 'Error: $e');
     } finally {
       if (!mounted) return;
@@ -1118,7 +1109,7 @@ class _ProtocolInvokeSheetState extends State<_ProtocolInvokeSheet> {
             const Text('Invoke Ready Room Protocol', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              value: _intent,
+              initialValue: _intent,
               decoration: const InputDecoration(labelText: 'Intent'),
               items: const [
                 DropdownMenuItem(value: 'Decision support', child: Text('Decision support')),

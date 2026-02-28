@@ -300,7 +300,7 @@ class _AnalyzeRoomState extends State<AnalyzeRoom> {
     final prefs = snap.prefs;
     final features = snap.features;
 
-    String _s(dynamic v) => (v == null) ? '—' : v.toString();
+    String s(dynamic v) => (v == null) ? '—' : v.toString();
 
     return TempusCard(
       child: Column(
@@ -319,10 +319,10 @@ class _AnalyzeRoomState extends State<AnalyzeRoom> {
             spacing: 10,
             runSpacing: 10,
             children: [
-              TempusPill(text: 'AI Opt‑In: ${_s(prefs['aiOptIn'])}'),
-              TempusPill(text: 'Just the facts: ${_s(prefs['justTheFactsActive'])}'),
-              TempusPill(text: 'Length: ${_s(prefs['lengthDefault'])}'),
-              TempusPill(text: 'Format: ${_s(prefs['formatDefault'])}'),
+              TempusPill(text: 'AI Opt‑In: ${s(prefs['aiOptIn'])}'),
+              TempusPill(text: 'Just the facts: ${s(prefs['justTheFactsActive'])}'),
+              TempusPill(text: 'Length: ${s(prefs['lengthDefault'])}'),
+              TempusPill(text: 'Format: ${s(prefs['formatDefault'])}'),
             ],
           ),
           const SizedBox(height: 10),
@@ -332,10 +332,10 @@ class _AnalyzeRoomState extends State<AnalyzeRoom> {
             spacing: 10,
             runSpacing: 10,
             children: [
-              TempusPill(text: 'Samples: ${_s(features['samples'])}'),
-              TempusPill(text: 'Avg words: ${_s(features['avgWords'])}'),
-              TempusPill(text: 'Caps rate: ${_s(features['capsRate'])}'),
-              TempusPill(text: 'Profanity: ${_s(features['profanityRate'])}'),
+              TempusPill(text: 'Samples: ${s(features['samples'])}'),
+              TempusPill(text: 'Avg words: ${s(features['avgWords'])}'),
+              TempusPill(text: 'Caps rate: ${s(features['capsRate'])}'),
+              TempusPill(text: 'Profanity: ${s(features['profanityRate'])}'),
             ],
           ),
           const SizedBox(height: 10),

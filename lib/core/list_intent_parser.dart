@@ -13,6 +13,27 @@ class ListIntentParser {
 
     final lower = raw.toLowerCase();
 
+    // Pattern: "<listname>: item1, item2" (e.g., "grocery: milk, eggs")
+    // Treat as add-items intent (create list if missing is handled by executor/store).
+    final colonMatch = RegExp(r'^([a-z][a-z0-9 _-]{1,40})\s*:\s*(.+)$', caseSensitive: false)
+        .firstMatch(raw);
+    if (colonMatch != null) {
+      final name = (colonMatch.group(1) ?? '').trim();
+      final rest = (colonMatch.group(2) ?? '').trim();
+      if (name.isNotEmpty && rest.isNotEmpty) {
+        final items = rest
+            .split(RegExp(r'\s*,\s*'))
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList(growable: false);
+        if (items.isNotEmpty) {
+          return ListIntent(action: 'add', listName: _titleCase(name), items: items);
+        }
+      }
+    }
+
+
+
     // clear <list>
     final clear = RegExp(r'^clear\s+(.+?)(?:\s+list)?\s*$').firstMatch(lower);
     if (clear != null) {
@@ -78,4 +99,15 @@ class ListIntentParser {
     final words = raw.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
     return words.map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
   }
+
+  static String _titleCase(String s) {
+    final t = s.trim();
+    if (t.isEmpty) return t;
+    final parts = t.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList(growable: false);
+    return parts
+        .map((p) => p.length == 1 ? p.toUpperCase() : (p[0].toUpperCase() + p.substring(1).toLowerCase()))
+        .join(' ');
+  }
+
+
 }

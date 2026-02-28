@@ -4,6 +4,7 @@ import '../core/twin_plus/twin_event.dart';
 import '../core/twin_plus/twin_plus_scope.dart';
 import 'widgets/tempus_app_header.dart';
 import 'widgets/tempus_background.dart';
+import 'widgets/global_voice_fab.dart';
 
 /// Standard room scaffold wrapper.
 /// Additive wiring: emits Twin+ room open/close events so the system can learn
@@ -63,7 +64,21 @@ class _RoomFrameState extends State<RoomFrame> {
 
   @override
   Widget build(BuildContext context) {
-    final floatingActionButton = widget.floating ?? widget.fab;
+    // Hard stabilization: always provide the universal mic, and avoid nested Scaffold FAB overlap
+    // by composing the room FAB (if any) with the global mic in a single FAB slot.
+    final roomFab = widget.floating ?? widget.fab;
+
+    final floatingActionButton = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (roomFab != null) ...[
+          roomFab,
+          const SizedBox(height: 10),
+        ],
+        const GlobalVoiceFab(),
+      ],
+    );
 
     return Scaffold(
       body: SafeArea(

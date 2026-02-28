@@ -51,7 +51,7 @@ class ExplicitFeedbackStore {
     if (lines.length <= _maxEntries) return;
 
     final keep = lines.sublist(lines.length - _maxEntries);
-    await f.writeAsString(keep.join('\n') + '\n', flush: true);
+    await f.writeAsString('${keep.join('\n')}\n', flush: true);
   }
 
   static Future<List<Map<String, dynamic>>> loadRecent({int limit = 200}) async {

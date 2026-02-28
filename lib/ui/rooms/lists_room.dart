@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/app_state_scope.dart';
 import '../../core/list_item.dart';
 import '../../core/list_store.dart';
 import '../../core/twin_plus/twin_event.dart';
@@ -67,88 +66,97 @@ class _ListsRoomState extends State<ListsRoom> {
   Widget build(BuildContext context) {
     return RoomFrame(
       title: widget.roomName,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _newListCtrl,
-                    decoration: const InputDecoration(hintText: 'Create list (e.g., Grocery)'),
-                    onSubmitted: (_) => _createList(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(onPressed: _createList, child: const Text('Create')),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: Row(
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(
-                    width: 170,
-                    child: ListView(
-                      children: _lists
-                          .map((l) => ListTile(
-                                title: Text(l.name),
-                                selected: _selected?.id == l.id,
-                                onTap: () => setState(() => _selected = l),
-                              ))
-                          .toList(growable: false),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _newListCtrl,
+                          decoration: const InputDecoration(hintText: 'Create list (e.g., Grocery)'),
+                          onSubmitted: (_) => _createList(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(onPressed: _createList, child: const Text('Create')),
+                    ],
                   ),
-                  const VerticalDivider(width: 1),
-                  Expanded(
-                    child: _selected == null
-                        ? const Center(child: Text('No lists yet. Create one.'))
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(_selected!.name, style: Theme.of(context).textTheme.titleLarge),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _addItemCtrl,
-                                      decoration: const InputDecoration(hintText: 'Add item(s) (comma separated ok)'),
-                                      onSubmitted: (_) => _addItems(),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  FilledButton(onPressed: _addItems, child: const Text('Add')),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Expanded(
-                                child: ListView(
-                                  children: _selected!.entries.map((e) {
-                                    return CheckboxListTile(
-                                      value: e.checked,
-                                      title: Text(e.text),
-                                      onChanged: (_) async {
-                                        await ListStore.toggle(_selected!.id, e.id);
-                                        TwinPlusScope.of(context).observe(
-                                          TwinEvent.actionPerformed(
-                                            surface: 'lists',
-                                            action: 'list_item_toggled',
-                                            entityType: 'list_entry',
-                                            entityId: e.id,
-                                            meta: {'listId': _selected!.id},
-                                          ),
-                                        );
-                                        await _load();
-                                      },
-                                    );
-                                  }).toList(growable: false),
-                                ),
-                              ),
-                            ],
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height - 220,
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 170,
+                          child: ListView(
+                            children: _lists
+                                .map((l) => ListTile(
+                                      title: Text(l.name),
+                                      selected: _selected?.id == l.id,
+                                      onTap: () => setState(() => _selected = l),
+                                    ))
+                                .toList(growable: false),
                           ),
+                        ),
+                        const VerticalDivider(width: 1),
+                        Expanded(
+                          child: _selected == null
+                              ? const Center(child: Text('No lists yet. Create one.'))
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Text(_selected!.name, style: Theme.of(context).textTheme.titleLarge),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextField(
+                                            controller: _addItemCtrl,
+                                            decoration: const InputDecoration(hintText: 'Add item(s) (comma separated ok)'),
+                                            onSubmitted: (_) => _addItems(),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        FilledButton(onPressed: _addItems, child: const Text('Add')),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Expanded(
+                                      child: ListView(
+                                        children: _selected!.entries.map((e) {
+                                          return CheckboxListTile(
+                                            value: e.checked,
+                                            title: Text(e.text),
+                                            onChanged: (_) async {
+                                              await ListStore.toggle(_selected!.id, e.id);
+                                              TwinPlusScope.of(context).observe(
+                                                TwinEvent.actionPerformed(
+                                                  surface: 'lists',
+                                                  action: 'list_item_toggled',
+                                                  entityType: 'list_entry',
+                                                  entityId: e.id,
+                                                  meta: {'listId': _selected!.id},
+                                                ),
+                                              );
+                                              await _load();
+                                            },
+                                          );
+                                        }).toList(growable: false),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

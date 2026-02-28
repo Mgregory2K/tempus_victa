@@ -688,7 +688,7 @@ class _ProtocolInvokeSheetState extends State<_ProtocolInvokeSheet> {
             const Text('Invoke Ready Room Protocol', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              value: _intent,
+              initialValue: _intent,
               decoration: const InputDecoration(labelText: 'Intent'),
               items: const [
                 DropdownMenuItem(value: 'Decision support', child: Text('Decision support')),

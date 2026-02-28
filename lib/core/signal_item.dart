@@ -67,7 +67,7 @@ class SignalItem {
     final title = (j['title'] as String?) ?? 'Signal';
     final body = j['body'] as String?;
     final fp = (j['fingerprint'] as String?) ??
-        '${source}|${title}|${body ?? ''}';
+        '$source|$title|${body ?? ''}';
     final lastSeen = DateTime.tryParse('${j['lastSeenAt'] ?? ''}') ?? createdAt;
     final count = (j['count'] is int) ? j['count'] as int : int.tryParse('${j['count']}') ?? 1;
     final ack = (j['acknowledged'] is bool) ? j['acknowledged'] as bool : ('${j['acknowledged']}' == 'true');

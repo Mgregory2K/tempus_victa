@@ -10,6 +10,9 @@ import '../../core/task_item.dart';
 import '../../core/task_store.dart';
 import '../../core/twin_plus/twin_event.dart';
 import '../../core/twin_plus/twin_plus_scope.dart';
+import '../../core/capture_executor.dart';
+import '../../core/doctrine/routing_counter_store.dart';
+import '../widgets/route_this_sheet.dart';
 import '../../services/voice/voice_service.dart';
 import '../room_frame.dart';
 
@@ -45,12 +48,17 @@ class _BridgeRoomState extends State<BridgeRoom> {
       _live = '';
     });
 
-    await VoiceService.instance.start(
+    final started = await VoiceService.instance.start(
       onPartial: (p) {
         if (!mounted) return;
         setState(() => _live = p);
       },
     );
+
+    if (!started && mounted) {
+      setState(() => _listening = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Voice capture failed to start.')));
+    }
   }
 
   Future<void> _stopAndRoute() async {
@@ -76,12 +84,40 @@ class _BridgeRoomState extends State<BridgeRoom> {
       ),
     );
 
-    // 2) Route commands (dev-wide-open: best effort, deterministic fallbacks).
-    final routed = await _routeTranscript(kernel, transcript, res.durationMs);
+    // 2) Route commands (local-only; deterministic first, learned default last).
+    // During the training window, ask the user *once* where this should go.
+    const surfaceKey = 'bridge_voice';
+    String? overrideIntent;
 
-    // 3) Default UX: jump to the most relevant module.
+    final isMulti = transcript.contains(RegExp(r'\s+and\s+', caseSensitive: false));
+    if (!isMulti && RoutingCounterStore.instance.isTrainingWindow(surfaceKey)) {
+      overrideIntent = await RouteThisSheet.show(
+        context,
+        title: 'Route this capture (training)',
+        choices: const [
+          RouteChoice(label: 'Task', value: RoutingCounterStore.intentRouteToTask, icon: Icons.task_alt_rounded),
+          RouteChoice(label: 'Corkboard', value: RoutingCounterStore.intentRouteToCorkboard, icon: Icons.push_pin_rounded),
+        ],
+      );
+    }
+
+    final exec = await CaptureExecutor.instance.executeVoiceCapture(
+      surface: surfaceKey,
+      transcript: transcript,
+      durationMs: res.durationMs,
+      audioPath: res.audioPath,
+      observe: (e) => kernel.observe(e),
+      overrideRouteIntent: overrideIntent,
+    );
+
+    if (overrideIntent != null && mounted) {
+      final label = overrideIntent == RoutingCounterStore.intentRouteToCorkboard ? 'Corkboard' : 'Task';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Routed (training): $label')));
+    }
+
+    // 3) Default UX: jump to the most relevant module.: jump to the most relevant module.
     if (!mounted) return;
-    AppStateScope.of(context).setSelectedModule(routed);
+    AppStateScope.of(context).setSelectedModule(exec.nextModule);
   }
 
   Future<String> _routeTranscript(dynamic kernel, String transcript, int durationMs) async {

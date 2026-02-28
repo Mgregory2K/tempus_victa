@@ -4,6 +4,7 @@
 /// - fast
 /// - transparent
 /// - stable across offline mode
+library;
 
 class IntentSignalsLite {
   final bool timeSensitive;

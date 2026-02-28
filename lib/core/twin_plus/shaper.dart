@@ -90,6 +90,6 @@ class TwinShaper {
     if (length == 'long') maxChars = 2800;
 
     if (text.length <= maxChars) return text;
-    return text.substring(0, maxChars).trimRight() + '…';
+    return '${text.substring(0, maxChars).trimRight()}…';
   }
 }

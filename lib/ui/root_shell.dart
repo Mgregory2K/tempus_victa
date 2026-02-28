@@ -9,6 +9,7 @@ import '../core/module_def.dart';
 import '../core/module_order_store.dart';
 import '../core/module_registry.dart';
 import 'gear_carousel_nav.dart';
+// Global voice mic is injected by RoomFrame to avoid nested Scaffold FAB overlap.
 
 class RootShell extends StatefulWidget {
   const RootShell({super.key});

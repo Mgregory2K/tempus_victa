@@ -18,7 +18,7 @@ class TempusBackground extends StatelessWidget {
           end: Alignment.bottomCenter,
           colors: [
             cs.surface,
-            cs.surfaceVariant.withOpacity(0.35),
+            cs.surfaceContainerHighest.withOpacity(0.35),
           ],
         ),
       ),

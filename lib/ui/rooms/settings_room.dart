@@ -4,6 +4,7 @@ import '../../core/app_theme_controller.dart';
 import '../../core/usage_stats_ingestor.dart';
 import '../../core/notification_ingestor.dart';
 import '../../core/device_signals_service.dart';
+import '../../core/app_settings_store.dart';
 import '../../services/ai/ai_settings_store.dart';
 import '../../services/ai/openai_client.dart';
 import '../room_frame.dart';
@@ -24,6 +25,8 @@ class _SettingsRoomState extends State<SettingsRoom> {
 
   // AI
   bool _aiEnabled = false;
+  bool _assistantEnabled = true;
+  int _suggestionStrictness = 1;
   final _apiKeyCtrl = TextEditingController();
   final _modelCtrl = TextEditingController();
   bool _testing = false;
@@ -51,11 +54,15 @@ class _SettingsRoomState extends State<SettingsRoom> {
 
   Future<void> _load() async {
     final enabled = await AiSettingsStore.isEnabled();
+    final assistantEnabled = await AppSettingsStore().loadAssistantEnabled();
+    final strict = await AppSettingsStore().loadSuggestionStrictness();
     final key = await AiSettingsStore.getApiKey();
     final model = await AiSettingsStore.getModel();
     if (!mounted) return;
     setState(() {
       _aiEnabled = enabled;
+      _assistantEnabled = assistantEnabled;
+      _suggestionStrictness = strict;
       _apiKeyCtrl.text = key ?? '';
       _modelCtrl.text = model;
       _loading = false;
@@ -265,6 +272,69 @@ class _SettingsRoomState extends State<SettingsRoom> {
                       ),
                     );
                   },
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Assistant Mode (local-only)
+          Text(
+            'Assistant Mode',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          const Text('Predictive suggestion banners (local-only).'),
+          const SizedBox(height: 10),
+          Card(
+            child: Column(
+              children: [
+                SwitchListTile(
+                  title: const Text('Enable Assistant Mode'),
+                  subtitle: const Text('Turns suggestion banners on/off.'),
+                  value: _assistantEnabled,
+                  onChanged: (v) async {
+                    setState(() => _assistantEnabled = v);
+                    await AppSettingsStore().setAssistantEnabled(v);
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.tune_rounded),
+                  title: const Text('Suggestion strictness'),
+                  subtitle: Text(
+                    _suggestionStrictness == 2
+                        ? 'Conservative (high confidence only)'
+                        : (_suggestionStrictness == 0 ? 'Aggressive (more suggestions)' : 'Balanced'),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Row(
+                    children: [
+                      const Text('Aggressive'),
+                      Expanded(
+                        child: Slider(
+                          value: _suggestionStrictness.toDouble(),
+                          min: 0,
+                          max: 2,
+                          divisions: 2,
+                          label: _suggestionStrictness == 2
+                              ? 'Conservative'
+                              : (_suggestionStrictness == 0 ? 'Aggressive' : 'Balanced'),
+                          onChanged: _assistantEnabled
+                              ? (v) async {
+                                  final iv = v.round();
+                                  setState(() => _suggestionStrictness = iv);
+                                  await AppSettingsStore().setSuggestionStrictness(iv);
+                                }
+                              : null,
+                        ),
+                      ),
+                      const Text('Conservative'),
+                    ],
+                  ),
                 ),
               ],
             ),

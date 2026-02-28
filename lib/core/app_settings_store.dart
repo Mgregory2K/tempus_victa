@@ -8,6 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppSettingsStore {
   static const String _kDevMode = 'app.dev_mode';
   static const String _kThemeMode = 'app.theme_mode';
+  static const String _kAssistantEnabled = 'app.assistant_enabled';
+  static const String _kSuggestionStrictness = 'app.suggestion_strictness'; // 0=aggressive 1=balanced 2=conservative
+
 
   /// Loads persisted theme mode.
   ///
@@ -45,6 +48,38 @@ class AppSettingsStore {
     final next = !current;
     await setDevMode(next);
     return next;
+  }
+
+  /// Assistant Mode controls predictive suggestion banners (local-only).
+  /// Default: true.
+  Future<bool> loadAssistantEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_kAssistantEnabled) ?? true;
+  }
+
+  Future<void> setAssistantEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kAssistantEnabled, enabled);
+  }
+
+  /// Suggestion strictness:
+  /// 0 = aggressive (more suggestions)
+  /// 1 = balanced
+  /// 2 = conservative (high confidence only)
+  /// Default: 1.
+  Future<int> loadSuggestionStrictness() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getInt(_kSuggestionStrictness);
+    if (v == null) return 1;
+    if (v < 0) return 0;
+    if (v > 2) return 2;
+    return v;
+  }
+
+  Future<void> setSuggestionStrictness(int v) async {
+    final prefs = await SharedPreferences.getInstance();
+    final clamped = v < 0 ? 0 : (v > 2 ? 2 : v);
+    await prefs.setInt(_kSuggestionStrictness, clamped);
   }
 
   ThemeMode? _parseThemeMode(String? raw) {

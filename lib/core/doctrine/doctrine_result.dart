@@ -1,3 +1,5 @@
+import 'doctrine_plan.dart';
+
 class DoctrineWebResult {
   final String title;
   final String snippet;
@@ -13,6 +15,9 @@ class DoctrineWebResult {
 }
 
 class DoctrineResult {
+  /// Inspectable execution plan for provenance/dev tooling.
+  final DoctrinePlan? plan;
+
   final String decisionId;
 
   /// Renderable answer text (already shaped for the surface).
@@ -33,6 +38,7 @@ class DoctrineResult {
   const DoctrineResult({
     required this.decisionId,
     required this.text,
+    this.plan,
     this.webResults = const <DoctrineWebResult>[],
     this.fallbackLinks = const <String>[],
     this.reasonCodes = const <String>[],

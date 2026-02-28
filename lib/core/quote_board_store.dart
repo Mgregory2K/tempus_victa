@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+
 /// Simple local-first store for the Quote Board.
 ///
 /// Lifecycle management:

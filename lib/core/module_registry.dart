@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'module_def.dart';
-import '../ui/placeholder_room.dart';
 
 import '../ui/rooms/bridge_room.dart';
 import '../ui/rooms/daily_brief_room.dart';
@@ -16,6 +15,9 @@ import '../ui/rooms/analyze_room.dart';
 import '../ui/rooms/global_search_room.dart';
 import '../ui/rooms/quote_board_room.dart';
 import '../ui/rooms/lists_room.dart';
+import '../ui/ask_user/ask_user_screen.dart';
+import '../services/ask_user/ask_user.dart';
+import '../services/router/router_service.dart';
 
 class ModuleRegistry {
   /// Default module list (used to seed first-run and as a reset fallback).
@@ -51,7 +53,8 @@ class ModuleRegistry {
           name: 'Search',
           icon: Icons.search_rounded,
           usesCarousel: true,
-          builder: ({required roomName}) => GlobalSearchRoom(roomName: roomName),
+          builder: ({required roomName}) =>
+              GlobalSearchRoom(roomName: roomName),
         ),
         ModuleDef(
           id: 'corkboard',
@@ -115,6 +118,17 @@ class ModuleRegistry {
           icon: Icons.psychology_rounded,
           usesCarousel: true,
           builder: ({required roomName}) => AnalyzeRoom(roomName: roomName),
+        ),
+        ModuleDef(
+          id: 'asks',
+          name: 'Decisions',
+          icon: Icons.help_outline_rounded,
+          usesCarousel: true,
+          builder: ({required roomName}) {
+            final store = RouterService.instance.store!;
+            final mgr = AskUserManager(store);
+            return AskUserScreen(manager: mgr);
+          },
         ),
       ];
 }

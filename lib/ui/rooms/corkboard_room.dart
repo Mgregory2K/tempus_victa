@@ -150,7 +150,7 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
                     // Cork texture background (lighter than current).
                     Positioned.fill(child: CustomPaint(painter: _CorkPainter(isDark: Theme.of(ctx).brightness == Brightness.dark))),
                     // Notes
-                    ..._notes.map((n) => _noteWidget(ctx, n)).toList(growable: false),
+                    ..._notes.map((n) => _noteWidget(ctx, n)),
                     // Helper text
                     Positioned(
                       left: 14,
@@ -175,7 +175,6 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
 
     return RoomFrame(
       title: 'Corkboard',
-      child: body,
       headerTrailing: IconButton(
         tooltip: 'Refresh',
         onPressed: _load,
@@ -189,6 +188,16 @@ class _CorkboardRoomState extends State<CorkboardRoom> {
         },
         icon: const Icon(Icons.add),
         label: const Text('New note'),
+      ),
+      child: RefreshIndicator(
+        onRefresh: _load,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height,
+            child: body,
+          ),
+        ),
       ),
     );
   }

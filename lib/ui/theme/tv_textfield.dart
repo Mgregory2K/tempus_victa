@@ -194,7 +194,7 @@ class _TvTextFieldState extends State<TvTextField> {
     }
 
     setState(() => _listening = true);
-    await VoiceService.instance.start(
+    final started = await VoiceService.instance.start(
       onPartial: (txt) {
         final t = txt.trim();
         if (t.isEmpty) return;
@@ -205,6 +205,11 @@ class _TvTextFieldState extends State<TvTextField> {
         widget.onChanged?.call(t);
       },
     );
+
+    if (!started && mounted) {
+      setState(() => _listening = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Voice capture failed to start.')));
+    }
   }
 
   @override
@@ -217,8 +222,11 @@ class _TvTextFieldState extends State<TvTextField> {
 
   @override
   Widget build(BuildContext context) {
+    // Global Easy Mic FAB is the canonical voice capture entry.
+    // Disable per-field mic buttons to avoid duplicate capture controls.
+    const bool globalEasyMicEnabled = true;
     final suffix = widget.suffixIcon ??
-        (widget.enableVoice && _voiceReady
+        (widget.enableVoice && _voiceReady && !globalEasyMicEnabled
             ? IconButton(
                 tooltip: _listening ? 'Stop voice input' : 'Voice input',
                 onPressed: _toggleListen,
