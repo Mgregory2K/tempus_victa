@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:tempus_victa/services/ask_user/ask_user.dart';
+import 'dart:async';
 
 class _EditResult {
   final String title;
@@ -28,6 +29,16 @@ class _AskUserScreenState extends State<AskUserScreen> {
     setState(() {
       _pending = widget.manager.listPending();
     });
+  }
+
+  final Map<String, Timer?> _autosaveTimers = {};
+
+  @override
+  void dispose() {
+    for (final t in _autosaveTimers.values) {
+      t?.cancel();
+    }
+    super.dispose();
   }
 
   @override
@@ -63,6 +74,25 @@ class _AskUserScreenState extends State<AskUserScreen> {
                           TextEditingController(text: suggestedTitle);
                       final bodyCtl =
                           TextEditingController(text: suggestedBody);
+                      // Autosave on change (debounced)
+                      titleCtl.addListener(() {
+                        _autosaveTimers[provId]?.cancel();
+                        _autosaveTimers[provId] =
+                            Timer(const Duration(seconds: 1), () {
+                          widget.manager.saveDraft(
+                              provId, {'title': titleCtl.text.trim()});
+                        });
+                      });
+                      bodyCtl.addListener(() {
+                        _autosaveTimers[provId]?.cancel();
+                        _autosaveTimers[provId] =
+                            Timer(const Duration(seconds: 1), () {
+                          widget.manager.saveDraft(provId, {
+                            'title': titleCtl.text.trim(),
+                            'metadata': {'body': bodyCtl.text.trim()}
+                          });
+                        });
+                      });
                       return AlertDialog(
                         title: const Text('Confirm action'),
                         content: Column(

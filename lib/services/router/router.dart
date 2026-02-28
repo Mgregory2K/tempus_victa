@@ -120,6 +120,16 @@ class LocalStore {
         resolution TEXT
       );
     ''');
+    // Ensure DB user_version is set for migrations. Current schema version = 1
+    final versionRow = _db.select('PRAGMA user_version');
+    int userVer = 0;
+    if (versionRow.isNotEmpty) {
+      final row = versionRow.first;
+      userVer = row['user_version'] as int? ?? 0;
+    }
+    if (userVer < 1) {
+      _db.execute('PRAGMA user_version = 1');
+    }
   }
 
   void _loadIntoMemory() {

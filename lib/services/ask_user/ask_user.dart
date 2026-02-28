@@ -65,4 +65,26 @@ class AskUserManager {
     store.saveProvenance(provReject);
     return true;
   }
+
+  /// Save a draft override for the given provenance id. Drafts are stored as
+  /// an item with id `draft-{provId}` so they persist across restarts.
+  void saveDraft(String provId, Map<String, dynamic> overrides) {
+    final draftId = 'draft-$provId';
+    final item = {
+      'item_id': draftId,
+      'type': 'draft',
+      'title': overrides['title'] ?? 'draft',
+      'metadata': overrides['metadata'] ?? {},
+      'status': 'draft',
+      'created_at': DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
+      'source_ref': provId,
+    };
+    store.saveItem(item);
+  }
+
+  Map<String, dynamic>? getDraft(String provId) {
+    final draftId = 'draft-$provId';
+    return store.items[draftId];
+  }
 }
