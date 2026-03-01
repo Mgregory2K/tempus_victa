@@ -39,8 +39,10 @@ class SignalIntelligence {
     final tNowLocal = tNow;
     final ageHours = tNowLocal.difference(s.lastSeenAt).inMinutes / 60.0;
     final decayLambdaPerHour = 0.02; // tunable decay constant
-    final sourceTrust = TrustMath.applyDecay(sourceTrustRaw, decayLambdaPerHour, ageHours);
-    final reinforcement = TrustMath.applyDecay(reinforcementRaw, decayLambdaPerHour * 1.5, ageHours);
+    final sourceTrust =
+        TrustMath.applyDecay(sourceTrustRaw, decayLambdaPerHour, ageHours);
+    final reinforcement = TrustMath.applyDecay(
+        reinforcementRaw, decayLambdaPerHour * 1.5, ageHours);
     final actionability = _actionability(s.title, s.body);
     final recency = math.exp(-ageHours / 48.0).clamp(0.0, 1.0).toDouble();
 
