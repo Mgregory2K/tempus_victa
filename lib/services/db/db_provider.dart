@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:path_provider/path_provider.dart';
 import 'migration_runner.dart';
+import '../lexicon/lexicon.dart';
 
 class DatabaseProvider {
   static Database? _db;
@@ -50,6 +51,10 @@ class DatabaseProvider {
   static String? get dbPath => _dbPath;
 
   static void dispose() {
+    // Close any cached prepared statements in services that rely on the DB.
+    try {
+      LexiconService.close();
+    } catch (_) {}
     _db?.dispose();
     _db = null;
     _dbPath = null;
