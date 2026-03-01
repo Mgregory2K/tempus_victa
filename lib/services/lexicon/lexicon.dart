@@ -20,7 +20,7 @@ class LexiconService {
   /// Increment phrase occurrence and update score.
   static void observePhrase(String phrase) {
     final db = DatabaseProvider.instance;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     final stmt =
         db.prepare('SELECT count FROM lexicon_entries WHERE phrase = ?');
     final rows = stmt.select([phrase]);
@@ -50,9 +50,16 @@ class LexiconService {
         'SELECT phrase,count,last_seen,score,metadata FROM lexicon_entries WHERE phrase LIKE ? ORDER BY score DESC, count DESC LIMIT ?',
         ['${prefix}%', limit]);
     return rows.map((r) {
-      final meta = r['metadata'] != null
-          ? jsonDecode(r['metadata'] as String) as Map<String, dynamic>
-          : null;
+      Map<String, dynamic>? meta;
+      if (r['metadata'] != null) {
+        try {
+          meta = jsonDecode(r['metadata'] as String) as Map<String, dynamic>;
+        } catch (_) {
+          meta = null;
+        }
+      } else {
+        meta = null;
+      }
       return LexiconEntry(
           phrase: r['phrase'] as String,
           count: r['count'] as int,

@@ -7,7 +7,7 @@ class LearningEngine {
   static void processFeedback(
       {required String subject, required String event, String? phrase}) {
     final db = DatabaseProvider.instance;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
 
     // Update trust_scores: simple bump/deduct heuristics
     final cur = db

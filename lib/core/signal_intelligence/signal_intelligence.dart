@@ -36,8 +36,9 @@ class SignalIntelligence {
     // Apply temporal decay to trust signals using TrustMath. Use ageHours
     // (time since lastSeen) to decay fingerprint reinforcement and source trust
     // so older interactions reduce influence over time.
-    final tNowLocal = tNow;
-    final ageHours = tNowLocal.difference(s.lastSeenAt).inMinutes / 60.0;
+    final tNowLocal = tNow.toUtc();
+    final ageHours = math.max(
+      0.0, tNowLocal.difference(s.lastSeenAt.toUtc()).inMinutes / 60.0);
     final decayLambdaPerHour = 0.02; // tunable decay constant
     final sourceTrust =
         TrustMath.applyDecay(sourceTrustRaw, decayLambdaPerHour, ageHours);
