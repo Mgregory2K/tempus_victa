@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:tempus_victa/services/ask_user/ask_user.dart';
+import '../../services/ask_user/ask_user.dart';
 import 'dart:async';
 
 class _EditResult {
@@ -10,7 +10,7 @@ class _EditResult {
 
 class AskUserScreen extends StatefulWidget {
   final AskUserManager manager;
-  const AskUserScreen({Key? key, required this.manager}) : super(key: key);
+  const AskUserScreen({super.key, required this.manager});
 
   @override
   _AskUserScreenState createState() => _AskUserScreenState();
@@ -130,8 +130,9 @@ class _AskUserScreenState extends State<AskUserScreen> {
 
                   if (res == null) return;
                   final overrides = <String, dynamic>{'title': res.title};
-                  if (res.body != null)
+                  if (res.body != null) {
                     overrides['metadata'] = {'body': res.body};
+                  }
                   final newProv =
                       widget.manager.accept(p['prov_id'], overrides: overrides);
                   if (newProv != null) {

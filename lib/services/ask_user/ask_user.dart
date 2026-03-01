@@ -1,4 +1,4 @@
-import 'package:tempus_victa/services/router/router.dart';
+import '../router/router.dart';
 
 /// Manager to list and resolve `ask_user` provenance entries produced by Router.
 class AskUserManager {

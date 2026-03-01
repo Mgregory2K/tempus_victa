@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:tempus_victa/services/db/db_provider.dart';
+import '../db/db_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 class LexiconEntry {
@@ -25,8 +25,10 @@ class LexiconService {
 
   static void _ensureStatements() {
     final db = DatabaseProvider.instance;
-    _selectCountStmt ??= db.prepare('SELECT count FROM lexicon_entries WHERE phrase = ?');
-    _insertStmt ??= db.prepare('INSERT INTO lexicon_entries (phrase,count,last_seen,score) VALUES (?,?,?,?)');
+    _selectCountStmt ??=
+        db.prepare('SELECT count FROM lexicon_entries WHERE phrase = ?');
+    _insertStmt ??= db.prepare(
+        'INSERT INTO lexicon_entries (phrase,count,last_seen,score) VALUES (?,?,?,?)');
     _updateStmt ??= db.prepare(
         'UPDATE lexicon_entries SET count = ?, last_seen = ?, score = ? WHERE phrase = ?');
     _suggestStmt ??= db.prepare(

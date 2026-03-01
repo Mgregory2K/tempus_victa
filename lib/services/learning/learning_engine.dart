@@ -1,5 +1,5 @@
-import 'package:tempus_victa/services/lexicon/lexicon.dart';
-import 'package:tempus_victa/services/db/db_provider.dart';
+import '../lexicon/lexicon.dart';
+import '../db/db_provider.dart';
 
 class LearningEngine {
   /// Process a feedback event (e.g., promoted, opened, recycled) and update

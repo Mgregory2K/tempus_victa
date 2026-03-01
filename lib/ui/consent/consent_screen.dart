@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:tempus_victa/services/consent/consent.dart';
+import '../../services/consent/consent.dart';
 
 class ConsentScreen extends StatefulWidget {
   final ConsentManager manager;
-  const ConsentScreen({Key? key, required this.manager}) : super(key: key);
+  const ConsentScreen({super.key, required this.manager});
 
   @override
   _ConsentScreenState createState() => _ConsentScreenState();

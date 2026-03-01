@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:tempus_victa/services/trust/trust_math.dart';
+import '../../services/trust/trust_math.dart';
 
 import '../signal_item.dart';
 import 'signal_feedback_store.dart';
@@ -38,7 +38,7 @@ class SignalIntelligence {
     // so older interactions reduce influence over time.
     final tNowLocal = tNow.toUtc();
     final ageHours = math.max(
-      0.0, tNowLocal.difference(s.lastSeenAt.toUtc()).inMinutes / 60.0);
+        0.0, tNowLocal.difference(s.lastSeenAt.toUtc()).inMinutes / 60.0);
     final decayLambdaPerHour = 0.02; // tunable decay constant
     final sourceTrust =
         TrustMath.applyDecay(sourceTrustRaw, decayLambdaPerHour, ageHours);

@@ -23,6 +23,10 @@ class DeviceIngestService {
     if (_started) return;
     _started = true;
 
+    // Debug: mark init in logs
+    // ignore: avoid_print
+    print('DeviceIngestService.init');
+
     // Prime last usage timestamp to "now - 10 min" so first run isn't huge.
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -55,6 +59,8 @@ class DeviceIngestService {
 
   Future<void> _pullNotifications() async {
     final native = await NotificationIngestor.fetchAndClearSignals();
+    // ignore: avoid_print
+    print('DeviceIngestService: fetched notifications=${native.length}');
     if (native.isEmpty) return;
 
     final now = DateTime.now();
@@ -110,6 +116,8 @@ class DeviceIngestService {
 
   Future<void> _pullShares() async {
     final shares = await ShareIngestor.fetchAndClearShares();
+    // ignore: avoid_print
+    print('DeviceIngestService: fetched shares=${shares.length}');
     if (shares.isEmpty) return;
 
     final existing = await SignalStore.load();

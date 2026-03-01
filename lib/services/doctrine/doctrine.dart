@@ -1,5 +1,5 @@
-import 'package:tempus_victa/services/ingestion/ingestion.dart';
-import 'package:tempus_victa/services/router/router.dart';
+import '../ingestion/ingestion.dart';
+import '../router/router.dart';
 
 /// Very small rule-based parser to produce CandidatePlans from DoctrineInput.
 class Doctrine {

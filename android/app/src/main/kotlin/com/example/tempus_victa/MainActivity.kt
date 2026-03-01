@@ -88,8 +88,32 @@ class MainActivity: FlutterActivity() {
                     val list = fetchUsageEvents(since, maxEvents)
                     result.success(list)
                 }
+                "fetchAndClearShares" -> {
+                    // Expose shares on the existing ingest channel as well.
+                    try {
+                        val list = fetchAndClearShares()
+                        result.success(list)
+                    } catch (e: Exception) {
+                        result.error("share_error", e.message, null)
+                    }
+                }
                 else -> result.notImplemented()
 
+            }
+        }
+
+        // Also expose a dedicated 'tempus/share' channel for future compatibility.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tempus/share").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "fetchAndClearShares" -> {
+                    try {
+                        val list = fetchAndClearShares()
+                        result.success(list)
+                    } catch (e: Exception) {
+                        result.error("share_error", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
             }
         }
     }

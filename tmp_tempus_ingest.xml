@@ -1,0 +1,4 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+  <string name="buffer">[{"id":"notif1","createdAtMs":%NOW%,"source":"notification","packageName":"com.example.sender","title":"Welcome back, Mike","body":"Time unlocked: 3h 45m"},{"id":"notif2","createdAtMs":%NOW2%,"source":"notification","packageName":"com.example.sender","title":"Workout Tracker","body":"Legs Day: Squats 4/4"}]</string>
+</map>

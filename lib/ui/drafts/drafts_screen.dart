@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:tempus_victa/services/router/router.dart';
-import 'package:tempus_victa/services/router/router_service.dart';
-import 'package:tempus_victa/services/ask_user/ask_user.dart';
+import '../../services/router/router.dart';
+import '../../services/router/router_service.dart';
+import '../../services/ask_user/ask_user.dart';
 
 class DraftsScreen extends StatefulWidget {
   const DraftsScreen({super.key});

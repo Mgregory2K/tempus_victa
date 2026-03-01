@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:io';
 import 'package:sqlite3/sqlite3.dart';
-import 'package:tempus_victa/services/consent/consent.dart';
-import 'package:tempus_victa/services/redaction/redaction.dart';
-import 'package:tempus_victa/services/db/migration_runner.dart';
+import '../consent/consent.dart';
+import '../redaction/redaction.dart';
+import '../db/migration_runner.dart';
 
 class Policy {
   final bool internetAllowed;

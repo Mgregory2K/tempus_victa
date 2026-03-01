@@ -11,11 +11,26 @@ import 'ui/theme/tempus_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await TwinPlusKernel.instance.init();
-  await DeviceIngestService.instance.init();
-  // Initialize Router and persistence (SQLite-backed file DB)
-  await RouterService.instance.init(dbPath: 'build/local_store.db');
+  // Run the app immediately to show UI, then initialize heavier
+  // services asynchronously to avoid blocking startup on some devices.
   runApp(const TempusApp());
+
+  // Fire-and-forget initializers; catch and log errors to avoid
+  // unhandled rejections crashing the app during warm startup.
+  TwinPlusKernel.instance.init().catchError((e, st) {
+    // ignore: avoid_print
+    print('TwinPlusKernel.init error: $e');
+  });
+
+  DeviceIngestService.instance.init().catchError((e, st) {
+    // ignore: avoid_print
+    print('DeviceIngestService.init error: $e');
+  });
+
+  RouterService.instance.init().catchError((e, st) {
+    // ignore: avoid_print
+    print('RouterService.init error: $e');
+  });
 }
 
 class TempusApp extends StatefulWidget {
