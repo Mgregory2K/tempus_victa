@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:tempus_victa/services/trust/trust_math.dart';
+
 import '../signal_item.dart';
 import 'signal_feedback_store.dart';
 
@@ -27,8 +29,15 @@ class SignalIntelligence {
     final srcStats = snap.statsForSource(s.source);
     final fpStats = snap.statsForFingerprint(s.fingerprint);
 
-    final sourceTrust = _statsToTrust(srcStats);
-    final reinforcement = _statsToTrust(fpStats);
+    final sourceTrustRaw = _statsToTrust(srcStats);
+    final reinforcementRaw = _statsToTrust(fpStats);
+
+    // Apply temporal decay to trust signals using TrustMath. Use ageHours
+    // (time since lastSeen) to decay fingerprint reinforcement and source trust
+    // so older interactions reduce influence over time.
+    final decayLambdaPerHour = 0.02; // tunable decay constant
+    final sourceTrust = TrustMath.applyDecay(sourceTrustRaw, decayLambdaPerHour, ageHours);
+    final reinforcement = TrustMath.applyDecay(reinforcementRaw, decayLambdaPerHour * 1.5, ageHours);
     final actionability = _actionability(s.title, s.body);
 
     final ageHours = tNow.difference(s.lastSeenAt).inMinutes / 60.0;
