@@ -18,6 +18,7 @@ import '../ui/rooms/lists_room.dart';
 import '../ui/ask_user/ask_user_screen.dart';
 import '../services/ask_user/ask_user.dart';
 import '../services/router/router_service.dart';
+import '../ui/drafts/drafts_screen.dart';
 
 class ModuleRegistry {
   /// Default module list (used to seed first-run and as a reset fallback).
@@ -129,6 +130,13 @@ class ModuleRegistry {
             final mgr = AskUserManager(store);
             return AskUserScreen(manager: mgr);
           },
+        ),
+        ModuleDef(
+          id: 'drafts',
+          name: 'Drafts',
+          icon: Icons.drafts_rounded,
+          usesCarousel: true,
+          builder: ({required roomName}) => const DraftsScreen(),
         ),
       ];
 }
