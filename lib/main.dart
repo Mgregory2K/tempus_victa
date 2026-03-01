@@ -14,7 +14,7 @@ Future<void> main() async {
   await TwinPlusKernel.instance.init();
   await DeviceIngestService.instance.init();
   // Initialize Router and persistence (SQLite-backed file DB)
-  RouterService.instance.init(dbPath: 'build/local_store.db');
+  await RouterService.instance.init(dbPath: 'build/local_store.db');
   runApp(const TempusApp());
 }
 
@@ -98,7 +98,7 @@ class _TempusAppState extends State<TempusApp> {
 
 // Backwards-compatible simple app used by widget tests.
 class MyApp extends StatefulWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   State<MyApp> createState() => _MyAppState();

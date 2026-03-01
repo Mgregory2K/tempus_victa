@@ -36,7 +36,7 @@ class ConsentManager {
   final String? storagePath; // backward-compat JSON path
   late final Database? _db;
 
-  ConsentManager({String? dbPath, String? storagePath})
+  ConsentManager({String? dbPath, String? storagePath, Database? db})
       : dbPath = dbPath ??
             (storagePath != null && !storagePath.endsWith('.json')
                 ? storagePath
@@ -48,6 +48,15 @@ class ConsentManager {
       _loadJson(storagePath);
       return;
     }
+
+    if (db != null) {
+      _db = db;
+      _ensurePragmas();
+      _ensureSchema();
+      _load();
+      return;
+    }
+
     final f = File(this.dbPath!);
     if (!f.existsSync()) {
       f.parent.createSync(recursive: true);
@@ -62,7 +71,9 @@ class ConsentManager {
   void _ensurePragmas() {
     try {
       _db?.execute("PRAGMA journal_mode = WAL;");
-      _db?.execute("PRAGMA busy_timeout = 5000;");
+      _db?.execute("PRAGMA busy_timeout = 10000;");
+      _db?.execute("PRAGMA synchronous = NORMAL;");
+      _db?.execute("PRAGMA temp_store = MEMORY;");
     } catch (e) {
       // ignore
     }
@@ -132,7 +143,7 @@ class ConsentManager {
       required String via,
       String? notes,
       Map<String, dynamic>? meta}) {
-    final id = 'consent:${scope}:${DateTime.now().millisecondsSinceEpoch}';
+    final id = 'consent:$scope:${DateTime.now().millisecondsSinceEpoch}';
     final now = DateTime.now().toIso8601String();
     if (storagePath != null && storagePath!.endsWith('.json')) {
       // Legacy JSON mode

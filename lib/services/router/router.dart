@@ -69,16 +69,20 @@ class LocalStore {
   final String dbPath;
   late final Database _db;
 
-  LocalStore({String? dbPath}) : dbPath = dbPath ?? ':memory:' {
-    if (this.dbPath == ':memory:') {
-      _db = sqlite3.openInMemory();
+  LocalStore({String? dbPath, Database? db}) : dbPath = dbPath ?? ':memory:' {
+    if (db != null) {
+      _db = db;
     } else {
-      final dbFile = File(this.dbPath);
-      if (!dbFile.existsSync()) {
-        dbFile.parent.createSync(recursive: true);
-        dbFile.createSync();
+      if (this.dbPath == ':memory:') {
+        _db = sqlite3.openInMemory();
+      } else {
+        final dbFile = File(this.dbPath);
+        if (!dbFile.existsSync()) {
+          dbFile.parent.createSync(recursive: true);
+          dbFile.createSync();
+        }
+        _db = sqlite3.open(this.dbPath);
       }
-      _db = sqlite3.open(this.dbPath);
     }
     _ensureSchema();
     _loadIntoMemory();
@@ -87,7 +91,9 @@ class LocalStore {
   void _ensureSchema() {
     try {
       _db.execute("PRAGMA journal_mode = WAL;");
-      _db.execute("PRAGMA busy_timeout = 5000;");
+      _db.execute("PRAGMA busy_timeout = 10000;");
+      _db.execute("PRAGMA synchronous = NORMAL;");
+      _db.execute("PRAGMA temp_store = MEMORY;");
     } catch (_) {}
 
     _db.execute('''
@@ -248,6 +254,16 @@ class LocalStore {
     provenance[id] = Map.from(prov);
     return id;
   }
+
+  /// Delete an item by id from both in-memory map and the DB.
+  void deleteItem(String itemId) {
+    items.remove(itemId);
+    try {
+      final stmt = _db.prepare('DELETE FROM items WHERE item_id = ?');
+      stmt.execute([itemId]);
+      stmt.dispose();
+    } catch (_) {}
+  }
 }
 
 class Router {
@@ -268,8 +284,9 @@ class Router {
 
   /// Route doctrine output: choose top candidate and either commit locally or escalate.
   RouterDecision route(DoctrineOutput out) {
-    if (out.candidates.isEmpty)
+    if (out.candidates.isEmpty) {
       return RouterDecision(decision: 'ask_user', reason: 'no_candidates');
+    }
     out.candidates.sort((a, b) => b.confidence.compareTo(a.confidence));
     final top = out.candidates.first;
 

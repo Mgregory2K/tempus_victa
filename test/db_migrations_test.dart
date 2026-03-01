@@ -19,7 +19,8 @@ void main() {
     expect(v2, greaterThanOrEqualTo(2));
 
     // check drafts table exists
-    final tables = db.select("SELECT name FROM sqlite_master WHERE type='table' AND name='drafts'");
+    final tables = db.select(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='drafts'");
     expect(tables.isNotEmpty, isTrue);
 
     db.dispose();

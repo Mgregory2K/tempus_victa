@@ -15,6 +15,12 @@ class CorkboardDb {
     final file = File('${dir.path}/tempus_victa.sqlite');
 
     final db = sqlite3.open(file.path);
+    try {
+      db.execute("PRAGMA journal_mode = WAL;");
+      db.execute("PRAGMA busy_timeout = 10000;");
+      db.execute("PRAGMA synchronous = NORMAL;");
+      db.execute("PRAGMA temp_store = MEMORY;");
+    } catch (_) {}
     db.execute('''
       CREATE TABLE IF NOT EXISTS cork_notes (
         id TEXT PRIMARY KEY,
