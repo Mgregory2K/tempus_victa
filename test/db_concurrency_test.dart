@@ -5,7 +5,8 @@ import 'package:test/test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
-  test('Multiple connections write concurrently without permanent lock', () async {
+  test('Multiple connections write concurrently without permanent lock',
+      () async {
     final tmp = Directory.systemTemp.createTempSync('tv_db_conc');
     final dbPath = '${tmp.path}/conc.db';
     final f = File(dbPath);
@@ -21,7 +22,8 @@ void main() {
       db2.execute('PRAGMA journal_mode = WAL;');
       db2.execute('PRAGMA busy_timeout = 10000;');
 
-      db1.execute('CREATE TABLE IF NOT EXISTS conc_test (id TEXT PRIMARY KEY, val INTEGER);');
+      db1.execute(
+          'CREATE TABLE IF NOT EXISTS conc_test (id TEXT PRIMARY KEY, val INTEGER);');
 
       // perform many small concurrent inserts from both connections
       final futures = <Future>[];
@@ -29,7 +31,9 @@ void main() {
         futures.add(Future(() {
           try {
             final id = 'a-$i';
-            db1.execute('INSERT OR REPLACE INTO conc_test (id,val) VALUES (\?, ?);', [id, i]);
+            db1.execute(
+                'INSERT OR REPLACE INTO conc_test (id,val) VALUES (\?, ?);',
+                [id, i]);
           } catch (e) {
             // capture but don't rethrow here
           }
@@ -37,7 +41,9 @@ void main() {
         futures.add(Future(() {
           try {
             final id = 'b-$i';
-            db2.execute('INSERT OR REPLACE INTO conc_test (id,val) VALUES (\?, ?);', [id, i]);
+            db2.execute(
+                'INSERT OR REPLACE INTO conc_test (id,val) VALUES (\?, ?);',
+                [id, i]);
           } catch (e) {
             // ignore
           }

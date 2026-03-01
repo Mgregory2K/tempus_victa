@@ -37,8 +37,8 @@ class _DraftsScreenState extends State<DraftsScreen> {
     if (provId == null) return;
     final overrides = <String, dynamic>{};
     if (draft['title'] != null) overrides['title'] = draft['title'];
-    if (draft['metadata'] != null) overrides['metadata'] =
-        Map<String, dynamic>.from(draft['metadata']);
+    if (draft['metadata'] != null)
+      overrides['metadata'] = Map<String, dynamic>.from(draft['metadata']);
     _manager.accept(provId, overrides: overrides);
     _loadDrafts();
     ScaffoldMessenger.of(context)
@@ -65,9 +65,11 @@ class _DraftsScreenState extends State<DraftsScreen> {
             subtitle: Text(d['metadata']?.toString() ?? ''),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
               IconButton(
-                  onPressed: () => _applyDraft(d), icon: const Icon(Icons.upload)),
+                  onPressed: () => _applyDraft(d),
+                  icon: const Icon(Icons.upload)),
               IconButton(
-                  onPressed: () => _deleteDraft(d), icon: const Icon(Icons.delete)),
+                  onPressed: () => _deleteDraft(d),
+                  icon: const Icon(Icons.delete)),
             ]),
             onTap: () => showDialog(
                 context: context,

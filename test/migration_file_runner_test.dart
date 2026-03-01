@@ -7,7 +7,8 @@ import 'package:tempus_victa/services/db/migration_runner.dart';
 void main() {
   test('SQL-file migrations are applied in order', () {
     final tmp = Directory.systemTemp.createTempSync('tv_mig_test');
-    final migrationsDir = Directory('${tmp.path}/migrations_sql')..createSync(recursive: true);
+    final migrationsDir = Directory('${tmp.path}/migrations_sql')
+      ..createSync(recursive: true);
 
     // create a simple V3 migration file
     final f = File('${migrationsDir.path}/V3__create_test_table.sql');
@@ -30,7 +31,8 @@ void main() {
     final v = res.first['user_version'] as int;
     expect(v, greaterThanOrEqualTo(3));
 
-    final tables = db.select("SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'");
+    final tables = db.select(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'");
     expect(tables.isNotEmpty, isTrue);
 
     db.dispose();

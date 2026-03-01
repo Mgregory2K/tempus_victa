@@ -23,7 +23,8 @@ class SignalIntelligence {
   /// - Reinforcement (fingerprint-specific outcomes)
   /// - Recency
   /// - Repeat count
-  static SignalScore score(SignalItem s, SignalFeedbackSnapshot snap, {DateTime? now}) {
+  static SignalScore score(SignalItem s, SignalFeedbackSnapshot snap,
+      {DateTime? now}) {
     final tNow = now ?? DateTime.now();
 
     final srcStats = snap.statsForSource(s.source);
@@ -35,18 +36,24 @@ class SignalIntelligence {
     // Apply temporal decay to trust signals using TrustMath. Use ageHours
     // (time since lastSeen) to decay fingerprint reinforcement and source trust
     // so older interactions reduce influence over time.
+    final tNowLocal = tNow;
+    final ageHours = tNowLocal.difference(s.lastSeenAt).inMinutes / 60.0;
     final decayLambdaPerHour = 0.02; // tunable decay constant
     final sourceTrust = TrustMath.applyDecay(sourceTrustRaw, decayLambdaPerHour, ageHours);
     final reinforcement = TrustMath.applyDecay(reinforcementRaw, decayLambdaPerHour * 1.5, ageHours);
     final actionability = _actionability(s.title, s.body);
-
-    final ageHours = tNow.difference(s.lastSeenAt).inMinutes / 60.0;
     final recency = math.exp(-ageHours / 48.0).clamp(0.0, 1.0).toDouble();
 
-    final countBoost = (math.log(math.max(1, s.count).toDouble()) / 6.0).clamp(0.0, 0.18).toDouble();
+    final countBoost = (math.log(math.max(1, s.count).toDouble()) / 6.0)
+        .clamp(0.0, 0.18)
+        .toDouble();
 
     // Weighted blend. Keep it stable; no single feature dominates.
-    var score = (0.35 * sourceTrust) + (0.35 * actionability) + (0.20 * reinforcement) + (0.10 * recency) + countBoost;
+    var score = (0.35 * sourceTrust) +
+        (0.35 * actionability) +
+        (0.20 * reinforcement) +
+        (0.10 * recency) +
+        countBoost;
     score = score.clamp(0.0, 1.0).toDouble();
 
     final reasons = <String>[];
@@ -70,7 +77,11 @@ class SignalIntelligence {
   /// - recycled (medium)
   /// - muted (strong)
   static double _statsToTrust(SignalFeedbackStats st) {
-    final raw = (st.promoted * 2.0) + (st.opened * 0.25) + (st.acknowledged * 0.15) - (st.recycled * 0.8) - (st.muted * 1.2);
+    final raw = (st.promoted * 2.0) +
+        (st.opened * 0.25) +
+        (st.acknowledged * 0.15) -
+        (st.recycled * 0.8) -
+        (st.muted * 1.2);
 
     // Squash to [-1..1] then map to [0..1]
     final squashed = raw / (raw.abs() + 3.0);

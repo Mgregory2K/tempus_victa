@@ -14,7 +14,4 @@ class TrustMath {
     if (v.isNaN) return current;
     return v.clamp(0.0, 1.0);
   }
-
 }
-
-

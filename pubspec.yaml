@@ -18,6 +18,7 @@ dependencies:
   url_launcher: ^6.3.2
   sqlite3: ^3.1.6
   sqlite3_flutter_libs: ^0.6.0+eol
+  drift: ^2.8.0
   fl_chart: ^1.1.1
   flutter_svg: ^2.2.3
   firebase_core: ^4.4.0
@@ -47,6 +48,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  drift_dev: ^2.8.0
+  build_runner: ^2.6.8
 
 flutter:
   uses-material-design: true
